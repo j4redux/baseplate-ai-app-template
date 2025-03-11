@@ -11,11 +11,33 @@ import {
   UndoIcon,
 } from '@/components/icons';
 import { Suggestion } from '@/lib/db/schema';
+import { generateUUID } from '@/lib/utils';
 import { toast } from 'sonner';
 import { getSuggestions } from '../actions';
 
+interface TextMessage {
+  readonly id: string;
+  content: string;
+  readonly timestamp: number;
+}
+
 interface TextArtifactMetadata {
-  suggestions: Array<Suggestion>;
+  readonly suggestions: Array<Suggestion>;
+  messages: TextMessage[];
+}
+
+type ArtifactMode = 'diff' | 'edit';
+type ArtifactStatus = 'streaming' | 'idle';
+
+interface EditorProps {
+  readonly mode: ArtifactMode;
+  readonly status: ArtifactStatus;
+  readonly isCurrentVersion: boolean;
+  readonly currentVersionIndex: number;
+  readonly getDocumentContentById: (index: number) => string;
+  readonly isLoading: boolean;
+  readonly metadata: TextArtifactMetadata;
+  readonly setMetadata: (updater: (metadata: TextArtifactMetadata) => TextArtifactMetadata) => void;
 }
 
 export const textArtifact = new Artifact<'text', TextArtifactMetadata>({
@@ -24,49 +46,86 @@ export const textArtifact = new Artifact<'text', TextArtifactMetadata>({
   initialize: async ({ documentId, setMetadata }) => {
     const suggestions = await getSuggestions({ documentId });
 
+    // Initialize with empty arrays to prevent undefined errors
     setMetadata({
-      suggestions,
+      suggestions: suggestions ?? [],
+      messages: [],
     });
   },
   onStreamPart: ({ streamPart, setMetadata, setArtifact }) => {
     if (streamPart.type === 'suggestion') {
-      setMetadata((metadata) => {
+      setMetadata((prevMetadata) => {
+        // Ensure we have a valid metadata object
+        const metadata = prevMetadata ?? { suggestions: [], messages: [] };
         return {
-          suggestions: [
-            ...metadata.suggestions,
-            streamPart.content as Suggestion,
-          ],
+          ...metadata,
+          suggestions: [...metadata.suggestions, streamPart.content as Suggestion],
         };
       });
     }
 
     if (streamPart.type === 'text-delta') {
-      setArtifact((draftArtifact) => {
-        return {
-          ...draftArtifact,
-          content: draftArtifact.content + (streamPart.content as string),
-          isVisible:
-            draftArtifact.status === 'streaming' &&
-            draftArtifact.content.length > 400 &&
-            draftArtifact.content.length < 450
-              ? true
-              : draftArtifact.isVisible,
-          status: 'streaming',
-        };
+      const content = streamPart.content as string;
+      
+      // Process the content to prevent accidental heading formatting
+      const processedContent = content.replace(/^(#{1,6}\s)/gm, '\\$1');
+      
+      // Check for natural message boundaries
+      const boundaryPatterns = [
+        /\n\s*\n(?=[A-Z])/, // Paragraph break followed by capital letter
+        /(?<=\.)\s+(?=[A-Z])/, // Sentence end followed by capital letter
+        /\n(?=[0-9]+\.)/, // New line followed by numbered list
+        /\n(?=[-*]\s)/ // New line followed by bullet point
+      ];
+      
+      const hasBoundary = boundaryPatterns.some(pattern => processedContent.match(pattern));
+      
+      setMetadata((prevMetadata) => {
+        // Ensure we have a valid metadata object with initialized arrays
+        const metadata = prevMetadata ?? { suggestions: [], messages: [] };
+        
+        // Start a new message if we detect a boundary or if this is the first message
+        if (hasBoundary || !metadata.messages?.length) {
+          return {
+            ...metadata,
+            messages: [
+              ...metadata.messages,
+              {
+                id: generateUUID(),
+                content: processedContent.trim(),
+                timestamp: Date.now(),
+              },
+            ],
+          };
+        }
+
+        // Append to the latest message with proper spacing
+        const messages = [...metadata.messages];
+        const lastMessage = messages[messages.length - 1];
+        const needsSpace = !lastMessage.content.endsWith(' ') && !processedContent.startsWith(' ');
+        lastMessage.content += (needsSpace ? ' ' : '') + processedContent.trim();
+
+        return { ...metadata, messages };
       });
+      
+      // Update artifact content for backward compatibility
+      setArtifact((draftArtifact) => ({
+        ...draftArtifact,
+        content: draftArtifact.content + content,
+        status: 'streaming',
+      }));
     }
   },
   content: ({
     mode,
     status,
-    content,
     isCurrentVersion,
     currentVersionIndex,
-    onSaveContent,
     getDocumentContentById,
     isLoading,
     metadata,
-  }) => {
+    setMetadata,
+  }: EditorProps) => {
     if (isLoading) {
       return <DocumentSkeleton artifactKind="text" />;
     }
@@ -80,21 +139,30 @@ export const textArtifact = new Artifact<'text', TextArtifactMetadata>({
 
     return (
       <>
-        <div className="flex flex-row py-8 md:p-20 px-4">
-          <Editor
-            content={content}
-            suggestions={metadata ? metadata.suggestions : []}
-            isCurrentVersion={isCurrentVersion}
-            currentVersionIndex={currentVersionIndex}
-            status={status}
-            onSaveContent={onSaveContent}
-          />
+        <div className="flex flex-col space-y-8 py-8 md:p-20 px-4">
+          {metadata?.messages.map((message, index) => (
+            <div key={message.id} className="flex flex-row">
+              <Editor
+                content={message.content}
+                suggestions={metadata.suggestions}
+                isCurrentVersion={isCurrentVersion}
+                currentVersionIndex={currentVersionIndex}
+                status={status}
+                onSaveContent={(newContent) => {
+                  // Update the specific message's content
+                  setMetadata((metadata) => {
+                    const messages = [...metadata.messages];
+                    messages[index] = { ...message, content: newContent };
+                    return { ...metadata, messages };
+                  });
+                }}
+              />
 
-          {metadata &&
-          metadata.suggestions &&
-          metadata.suggestions.length > 0 ? (
-            <div className="md:hidden h-dvh w-12 shrink-0" />
-          ) : null}
+              {metadata.suggestions && metadata.suggestions.length > 0 ? (
+                <div className="md:hidden h-dvh w-12 shrink-0" />
+              ) : null}
+            </div>
+          ))}
         </div>
       </>
     );

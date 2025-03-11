@@ -86,7 +86,10 @@ export async function POST(request: Request) {
                   'updateDocument',
                   'requestSuggestions',
                 ],
-          experimental_transform: smoothStream({ chunking: 'word' }),
+          experimental_transform: smoothStream({
+            chunking: 'word',
+            delayInMs: null
+          }),
           experimental_generateMessageId: generateUUID,
           tools: {
             getWeather,

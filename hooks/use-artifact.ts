@@ -3,6 +3,16 @@
 import useSWR from 'swr';
 import { UIArtifact } from '@/components/artifact';
 import { useCallback, useMemo } from 'react';
+import { Suggestion } from '@/lib/db/schema';
+
+interface ArtifactMetadata {
+  readonly suggestions: Suggestion[];
+  readonly messages: Array<{
+    readonly id: string;
+    readonly content: string;
+    readonly timestamp: number;
+  }>;
+}
 
 export const initialArtifactData: UIArtifact = {
   documentId: 'init',
@@ -43,43 +53,51 @@ export function useArtifact() {
     },
   );
 
+  const { data: localMetadata, mutate: setLocalMetadata } = useSWR<ArtifactMetadata>(
+    () => localArtifact?.documentId ? `artifact-metadata-${localArtifact.documentId}` : null,
+    null,
+    {
+      fallbackData: { suggestions: [], messages: [] },
+    },
+  );
+
   const artifact = useMemo(() => {
-    if (!localArtifact) return initialArtifactData;
-    return localArtifact;
+    return localArtifact ?? initialArtifactData;
   }, [localArtifact]);
+
+  const metadata = useMemo(() => {
+    return localMetadata ?? { suggestions: [], messages: [] };
+  }, [localMetadata]);
 
   const setArtifact = useCallback(
     (updaterFn: UIArtifact | ((currentArtifact: UIArtifact) => UIArtifact)) => {
-      setLocalArtifact((currentArtifact) => {
-        const artifactToUpdate = currentArtifact || initialArtifactData;
-
-        if (typeof updaterFn === 'function') {
-          return updaterFn(artifactToUpdate);
-        }
-
-        return updaterFn;
+      return setLocalArtifact((currentArtifact) => {
+        const artifactToUpdate = currentArtifact ?? initialArtifactData;
+        return typeof updaterFn === 'function' ? updaterFn(artifactToUpdate) : updaterFn;
       });
     },
     [setLocalArtifact],
   );
 
-  const { data: localArtifactMetadata, mutate: setLocalArtifactMetadata } =
-    useSWR<any>(
-      () =>
-        artifact.documentId ? `artifact-metadata-${artifact.documentId}` : null,
-      null,
-      {
-        fallbackData: null,
-      },
-    );
+  const setMetadata = useCallback(
+    (updater: ((current: ArtifactMetadata) => ArtifactMetadata) | Partial<ArtifactMetadata>) => {
+      return setLocalMetadata((current) => {
+        const currentMetadata = current ?? { suggestions: [], messages: [] };
+        return typeof updater === 'function'
+          ? updater(currentMetadata)
+          : { ...currentMetadata, ...updater };
+      });
+    },
+    [setLocalMetadata],
+  );
 
   return useMemo(
     () => ({
       artifact,
+      metadata,
       setArtifact,
-      metadata: localArtifactMetadata,
-      setMetadata: setLocalArtifactMetadata,
+      setMetadata,
     }),
-    [artifact, setArtifact, localArtifactMetadata, setLocalArtifactMetadata],
+    [artifact, metadata, setArtifact, setMetadata],
   );
 }

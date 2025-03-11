@@ -6,6 +6,78 @@ import type {
   ToolInvocation,
   ToolSet,
 } from 'ai';
+
+interface TextProcessingOptions {
+  readonly preserveNewlines?: boolean;
+  readonly preserveSpaces?: boolean;
+  readonly preserveMarkdownHeadings?: boolean;
+}
+
+export function processText(text: string, options: TextProcessingOptions = {}): string {
+  const { 
+    preserveNewlines = false, 
+    preserveSpaces = false,
+    preserveMarkdownHeadings = false 
+  } = options;
+  
+  // First, normalize all whitespace while preserving intentional newlines
+  let processed = text
+    .replace(/[\t\f\r ]+/g, ' ')
+    .trim();
+
+  if (preserveMarkdownHeadings) {
+    // For documents, preserve markdown structure and formatting
+    processed = processed
+      // Normalize markdown headings
+      .replace(/^(#{1,6})([^\s#])/gm, '$1 $2')
+      // Ensure proper list formatting
+      .replace(/^(\d+)\.(\s*)/gm, '$1. ')
+      .replace(/^([*-])\s*/gm, '$1 ')
+      // Preserve intentional line breaks
+      .replace(/\n{3,}/g, '\n\n');
+  } else {
+    // For chat messages, simplify formatting
+    processed = processed
+      // Normalize lists without affecting other content
+      .replace(/^(\d+)\.(\s*)/gm, '$1. ')
+      .replace(/^([*-])\s*/gm, '$1 ');
+    
+    // Handle newlines
+    if (!preserveNewlines) {
+      // Convert all newlines to spaces if not preserving newlines
+      processed = processed.replace(/\n+/g, ' ');
+    }
+    // When preserveNewlines is true, we leave the newlines intact
+  }
+
+  // Handle sentence spacing consistently
+  if (preserveNewlines) {
+    // When preserving newlines, only normalize spaces while keeping newlines intact
+    processed = processed
+      .replace(/([.!?])(?!["'.'])/g, '$1 ')
+      // Replace multiple spaces with a single space, but preserve newlines
+      .replace(/[^\S\n]+/g, ' ')
+      .trim();
+  } else {
+    // Standard whitespace normalization when not preserving newlines
+    processed = processed
+      .replace(/([.!?])(?!["'.'])/g, '$1 ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  return processed;
+}
+
+interface MessageContent {
+  readonly type: 'text' | 'tool-call' | 'tool-result' | 'reasoning';
+  readonly text?: string;
+  readonly toolCallId?: string;
+  readonly toolName?: string;
+  readonly args?: Record<string, unknown>;
+  readonly reasoning?: string;
+  readonly result?: unknown;
+}
 import { type ClassValue, clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -86,9 +158,9 @@ function addToolMessageToChat({
 }
 
 export function convertToUIMessages(
-  messages: Array<DBMessage>,
-): Array<Message> {
-  return messages.reduce((chatMessages: Array<Message>, message) => {
+  messages: readonly DBMessage[],
+): Message[] {
+  return messages.reduce<Message[]>((chatMessages, message) => {
     if (message.role === 'tool') {
       return addToolMessageToChat({
         toolMessage: message as CoreToolMessage,
@@ -96,33 +168,57 @@ export function convertToUIMessages(
       });
     }
 
-    let textContent = '';
-    let reasoning: string | undefined = undefined;
-    const toolInvocations: Array<ToolInvocation> = [];
+    const processContent = (content: MessageContent[]): {
+      text: string;
+      reasoning?: string;
+      toolInvocations: ToolInvocation[];
+    } => {
+      const textParts: string[] = [];
+      const toolInvocations: ToolInvocation[] = [];
+      let reasoning: string | undefined;
 
-    if (typeof message.content === 'string') {
-      textContent = message.content;
-    } else if (Array.isArray(message.content)) {
-      for (const content of message.content) {
-        if (content.type === 'text') {
-          textContent += content.text;
-        } else if (content.type === 'tool-call') {
-          toolInvocations.push({
-            state: 'call',
-            toolCallId: content.toolCallId,
-            toolName: content.toolName,
-            args: content.args,
-          });
-        } else if (content.type === 'reasoning') {
-          reasoning = content.reasoning;
+      // Process text parts first to ensure complete sentences before tool calls
+      const processedText = content
+        .filter((part): part is MessageContent & { type: 'text'; text: string } =>
+          part.type === 'text' && typeof part.text === 'string'
+        )
+        .map(part => processText(part.text))
+        .join(' ');
+      
+      // Process tool calls and reasoning after text is properly formatted
+      content.forEach((part) => {
+        switch (part.type) {
+          case 'tool-call':
+            if (part.toolCallId && part.toolName) {
+              toolInvocations.push({
+                state: 'call',
+                toolCallId: part.toolCallId,
+                toolName: part.toolName,
+                args: part.args ?? {},
+              });
+            }
+            break;
+          case 'reasoning':
+            if (part.reasoning) {
+              reasoning = part.reasoning;
+            }
+            break;
         }
-      }
-    }
+      });
+
+      const text = processedText;
+
+      return { text, reasoning, toolInvocations };
+    };
+
+    const { text, reasoning, toolInvocations } = typeof message.content === 'string'
+      ? { text: message.content, reasoning: undefined, toolInvocations: [] }
+      : processContent(message.content as MessageContent[]);
 
     chatMessages.push({
       id: message.id,
       role: message.role as Message['role'],
-      content: textContent,
+      content: text,
       reasoning,
       toolInvocations,
     });

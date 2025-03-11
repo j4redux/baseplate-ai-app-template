@@ -21,11 +21,34 @@ export type DataStreamDelta = {
   content: string | Suggestion;
 };
 
-export function DataStreamHandler({ id }: { id: string }) {
-  const { data: dataStream } = useChat({ id });
-  const { artifact, setArtifact, setMetadata } = useArtifact();
-  const lastProcessedIndex = useRef(-1);
+interface DataStreamHandlerProps {
+  readonly id: string;
+}
 
+export function DataStreamHandler({ id }: DataStreamHandlerProps) {
+  const { data: dataStream } = useChat({ id });
+  const { artifact, setArtifact, metadata, setMetadata } = useArtifact();
+  const lastProcessedIndex = useRef(-1);
+  const isInitialized = useRef(false);
+
+  // Initialize metadata when artifact kind changes or component mounts
+  useEffect(() => {
+    if (!isInitialized.current && artifact.kind) {
+      const artifactDefinition = artifactDefinitions.find(
+        (def) => def.kind === artifact.kind
+      );
+      
+      if (artifactDefinition?.initialize) {
+        isInitialized.current = true;
+        artifactDefinition.initialize({
+          documentId: id,
+          setMetadata,
+        });
+      }
+    }
+  }, [artifact.kind, id, setMetadata]);
+
+  // Process new data stream deltas
   useEffect(() => {
     if (!dataStream?.length) return;
 
@@ -34,7 +57,7 @@ export function DataStreamHandler({ id }: { id: string }) {
 
     (newDeltas as DataStreamDelta[]).forEach((delta: DataStreamDelta) => {
       const artifactDefinition = artifactDefinitions.find(
-        (artifactDefinition) => artifactDefinition.kind === artifact.kind,
+        (def) => def.kind === artifact.kind
       );
 
       if (artifactDefinition?.onStreamPart) {
@@ -45,52 +68,45 @@ export function DataStreamHandler({ id }: { id: string }) {
         });
       }
 
-      setArtifact((draftArtifact) => {
-        if (!draftArtifact) {
-          return { ...initialArtifactData, status: 'streaming' };
-        }
+      setArtifact((currentArtifact) => {
+        const baseArtifact = currentArtifact ?? initialArtifactData;
 
         switch (delta.type) {
           case 'id':
             return {
-              ...draftArtifact,
+              ...baseArtifact,
               documentId: delta.content as string,
               status: 'streaming',
             };
-
           case 'title':
             return {
-              ...draftArtifact,
+              ...baseArtifact,
               title: delta.content as string,
               status: 'streaming',
             };
-
           case 'kind':
             return {
-              ...draftArtifact,
+              ...baseArtifact,
               kind: delta.content as ArtifactKind,
               status: 'streaming',
             };
-
           case 'clear':
             return {
-              ...draftArtifact,
+              ...baseArtifact,
               content: '',
               status: 'streaming',
             };
-
           case 'finish':
             return {
-              ...draftArtifact,
+              ...baseArtifact,
               status: 'idle',
             };
-
           default:
-            return draftArtifact;
+            return baseArtifact;
         }
       });
     });
-  }, [dataStream, setArtifact, setMetadata, artifact]);
+  }, [dataStream, setArtifact, setMetadata, artifact.kind]);
 
   return null;
 }

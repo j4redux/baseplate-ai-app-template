@@ -36,6 +36,16 @@ export interface DocumentHandler<T = ArtifactKind> {
   onUpdateDocument: (args: UpdateDocumentCallbackProps) => Promise<void>;
 }
 
+/**
+ * Map to track documents currently being updated to prevent recursive updates
+ */
+const updateLocks = new Map<string, boolean>();
+
+/**
+ * Creates a document handler for a specific artifact kind
+ * @param config Configuration object containing handler callbacks
+ * @returns DocumentHandler instance
+ */
 export function createDocumentHandler<T extends ArtifactKind>(config: {
   kind: T;
   onCreateDocument: (params: CreateDocumentCallbackProps) => Promise<string>;
@@ -63,25 +73,37 @@ export function createDocumentHandler<T extends ArtifactKind>(config: {
 
       return;
     },
-    onUpdateDocument: async (args: UpdateDocumentCallbackProps) => {
-      const draftContent = await config.onUpdateDocument({
-        document: args.document,
-        description: args.description,
-        dataStream: args.dataStream,
-        session: args.session,
-      });
-
-      if (args.session?.user?.id) {
-        await saveDocument({
-          id: args.document.id,
-          title: args.document.title,
-          content: draftContent,
-          kind: config.kind,
-          userId: args.session.user.id,
-        });
+    onUpdateDocument: async (args: UpdateDocumentCallbackProps): Promise<void> => {
+      // Check if document is already being updated
+      if (updateLocks.get(args.document.id)) {
+        console.warn(`Skipping update for document ${args.document.id} - update already in progress`);
+        return;
       }
 
-      return;
+      try {
+        // Set update lock
+        updateLocks.set(args.document.id, true);
+
+        const draftContent = await config.onUpdateDocument({
+          document: args.document,
+          description: args.description,
+          dataStream: args.dataStream,
+          session: args.session,
+        });
+
+        if (args.session?.user?.id) {
+          await saveDocument({
+            id: args.document.id,
+            title: args.document.title,
+            content: draftContent,
+            kind: config.kind,
+            userId: args.session.user.id,
+          });
+        }
+      } finally {
+        // Always release the lock, even if there's an error
+        updateLocks.delete(args.document.id);
+      }
     },
   };
 }

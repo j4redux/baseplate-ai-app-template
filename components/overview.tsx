@@ -18,13 +18,10 @@ export const Overview = () => {
           <MessageIcon size={32} />
         </p>
         <p>
-          Welcome to your AI chatbot! This is a modern, customizable chat interface
-          built with Next.js. It features real-time streaming responses, markdown support,
-          and a clean, responsive design.
+          This is a modern, customizable chat interface built with Next.js. It features real-time streaming responses, markdown support, and a clean, responsive design.
         </p>
         <p>
-          Start a conversation by typing a message below. You can create multiple chat
-          sessions and switch between different AI models.
+          Start a conversation by typing a message below. You can create multiple chat sessions and switch between different AI models.
         </p>
       </div>
     </motion.div>

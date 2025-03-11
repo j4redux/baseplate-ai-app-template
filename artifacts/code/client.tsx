@@ -62,8 +62,17 @@ function detectRequiredHandlers(code: string): string[] {
   return handlers;
 }
 
+interface CodeMessage {
+  id: string;
+  content: string;
+  language?: string;
+  timestamp: number;
+}
+
 interface Metadata {
   outputs: Array<ConsoleOutput>;
+  language?: string;
+  messages: CodeMessage[];
 }
 
 export const codeArtifact = new Artifact<'code', Metadata>({
@@ -73,19 +82,48 @@ export const codeArtifact = new Artifact<'code', Metadata>({
   initialize: async ({ setMetadata }) => {
     setMetadata({
       outputs: [],
+      language: 'python', // Default language
+      messages: [],
     });
   },
-  onStreamPart: ({ streamPart, setArtifact }) => {
+  onStreamPart: ({ streamPart, setArtifact, setMetadata }) => {
     if (streamPart.type === 'code-delta') {
+      const content = streamPart.content as string;
+      const languageMatch = content.match(/^language:([a-zA-Z0-9+#]+)\n/);
+      
+      setMetadata((metadata) => {
+        if (languageMatch && languageMatch[1]) {
+          // Start a new message when language is detected
+          const detectedLanguage = languageMatch[1];
+          return {
+            ...metadata,
+            language: detectedLanguage,
+            messages: [
+              ...metadata.messages,
+              {
+                id: generateUUID(),
+                content: '',
+                language: detectedLanguage,
+                timestamp: Date.now(),
+              },
+            ],
+          };
+        }
+
+        // Append content to the latest message
+        const messages = [...metadata.messages];
+        if (messages.length > 0) {
+          const lastMessage = messages[messages.length - 1];
+          lastMessage.content += content;
+        }
+
+        return { ...metadata, messages };
+      });
+      
+      // Update artifact content for backward compatibility
       setArtifact((draftArtifact) => ({
         ...draftArtifact,
-        content: streamPart.content as string,
-        isVisible:
-          draftArtifact.status === 'streaming' &&
-          draftArtifact.content.length > 300 &&
-          draftArtifact.content.length < 310
-            ? true
-            : draftArtifact.isVisible,
+        content: content,
         status: 'streaming',
       }));
     }
@@ -93,8 +131,23 @@ export const codeArtifact = new Artifact<'code', Metadata>({
   content: ({ metadata, setMetadata, ...props }) => {
     return (
       <>
-        <div className="px-1">
-          <CodeEditor {...props} />
+        <div className="space-y-4">
+          {metadata?.messages.map((message, index) => (
+            <div key={message.id} className="px-1">
+              <CodeEditor
+                {...props}
+                content={message.content}
+                onSaveContent={(newContent) => {
+                  // Update the specific message's content
+                  setMetadata((metadata) => {
+                    const messages = [...metadata.messages];
+                    messages[index] = { ...message, content: newContent };
+                    return { ...metadata, messages };
+                  });
+                }}
+              />
+            </div>
+          ))}
         </div>
 
         {metadata?.outputs && (
@@ -117,20 +170,39 @@ export const codeArtifact = new Artifact<'code', Metadata>({
       label: 'Run',
       description: 'Execute code',
       onClick: async ({ content, setMetadata }) => {
+        // Only allow execution for Python code
+        const cleanContent = content.replace(/^language:[a-zA-Z0-9+#]+\n/, '');
         const runId = generateUUID();
         const outputContent: Array<ConsoleOutputContent> = [];
 
-        setMetadata((metadata) => ({
-          ...metadata,
-          outputs: [
-            ...metadata.outputs,
-            {
-              id: runId,
-              contents: [],
-              status: 'in_progress',
-            },
-          ],
-        }));
+        // Get current metadata to check language
+        let currentMetadata: Metadata | undefined;
+        setMetadata((metadata) => {
+          currentMetadata = metadata;
+          
+          // Check if the language is Python, if not show a warning
+          if (metadata.language && metadata.language.toLowerCase() !== 'python') {
+            toast.error(`Code execution is only available for Python. Current language: ${metadata.language}`);
+            return metadata;
+          }
+          
+          return {
+            ...metadata,
+            outputs: [
+              ...metadata.outputs,
+              {
+                id: runId,
+                contents: [],
+                status: 'in_progress',
+              },
+            ],
+          };
+        });
+        
+        // Exit early if not Python
+        if (currentMetadata?.language && currentMetadata.language.toLowerCase() !== 'python') {
+          return;
+        }
 
         try {
           // @ts-expect-error - loadPyodide is not defined
@@ -149,7 +221,7 @@ export const codeArtifact = new Artifact<'code', Metadata>({
             },
           });
 
-          await currentPyodideInstance.loadPackagesFromImports(content, {
+          await currentPyodideInstance.loadPackagesFromImports(cleanContent, {
             messageCallback: (message: string) => {
               setMetadata((metadata) => ({
                 ...metadata,
@@ -165,7 +237,7 @@ export const codeArtifact = new Artifact<'code', Metadata>({
             },
           });
 
-          const requiredHandlers = detectRequiredHandlers(content);
+          const requiredHandlers = detectRequiredHandlers(cleanContent);
           for (const handler of requiredHandlers) {
             if (OUTPUT_HANDLERS[handler as keyof typeof OUTPUT_HANDLERS]) {
               await currentPyodideInstance.runPythonAsync(
@@ -180,7 +252,7 @@ export const codeArtifact = new Artifact<'code', Metadata>({
             }
           }
 
-          await currentPyodideInstance.runPythonAsync(content);
+          await currentPyodideInstance.runPythonAsync(cleanContent);
 
           setMetadata((metadata) => ({
             ...metadata,
