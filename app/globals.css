@@ -1,0 +1,183 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+    --foreground-rgb: 0, 0, 0;
+    --background-start-rgb: 214, 219, 220;
+    --background-end-rgb: 255, 255, 255;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --foreground-rgb: 255, 255, 255;
+        --background-start-rgb: 0, 0, 0;
+        --background-end-rgb: 0, 0, 0;
+    }
+}
+
+@layer utilities {
+    .text-balance {
+        text-wrap: balance;
+    }
+}
+
+@layer base {
+    :root {
+        /* Korean minimalist palette - soft whites, warm grays, bolder accents */
+        --background: 35 30% 99%;
+        --foreground: 220 15% 15%;
+        --card: 35 30% 99%;
+        --card-foreground: 220 15% 15%;
+        --popover: 35 30% 99%;
+        --popover-foreground: 220 15% 15%;
+        --primary: 170 38% 17%;
+        --primary-foreground: 0 0% 100%;
+        --secondary: 30 20% 92%;
+        --secondary-foreground: 220 15% 15%;
+        --muted: 30 15% 96%;
+        --muted-foreground: 220 10% 40%;
+        --accent: 160 50% 40%;
+        --accent-foreground: 0 0% 100%;
+        --destructive: 354 32% 48%;
+        --destructive-foreground: 0 0% 100%;
+        --border: 220 15% 90%;
+        --input: 220 15% 90%;
+        --ring: 170 38% 17%;
+        --chart-1: 170 38% 17%;
+        --chart-2: 160 50% 40%;
+        --chart-3: 15 70% 50%;
+        --chart-4: 280 60% 55%;
+        --chart-5: 335 70% 60%;
+        --radius: 0.75rem;
+        --sidebar-background: 35 25% 97%;
+        --sidebar-foreground: 220 15% 30%;
+        --sidebar-primary: 170 38% 17%;
+        --sidebar-primary-foreground: 0 0% 100%;
+        --sidebar-accent: 30 20% 92%;
+        --sidebar-accent-foreground: 220 15% 30%;
+        --sidebar-border: 220 15% 90%;
+        --sidebar-ring: 170 38% 17%;
+    }
+
+    .dark {
+        /* Korean minimalist dark palette - deeper blues with vibrant accents */
+        --background: 225 25% 12%;
+        --foreground: 0 0% 95%;
+        --card: 225 25% 12%;
+        --card-foreground: 0 0% 95%;
+        --popover: 225 25% 12%;
+        --popover-foreground: 0 0% 95%;
+        --primary: 170 38% 17%;
+        --primary-foreground: 0 0% 100%;
+        --secondary: 215 25% 20%;
+        --secondary-foreground: 0 0% 95%;
+        --muted: 215 25% 20%;
+        --muted-foreground: 0 0% 70%;
+        --accent: 155 70% 45%;
+        --accent-foreground: 0 0% 100%;
+        --destructive: 354 32% 48%;
+        --destructive-foreground: 0 0% 100%;
+        --border: 215 25% 25%;
+        --input: 215 25% 25%;
+        --ring: 170 38% 17%;
+        --chart-1: 170 38% 17%;
+        --chart-2: 155 70% 45%;
+        --chart-3: 30 85% 55%;
+        --chart-4: 270 80% 65%;
+        --chart-5: 330 80% 65%;
+        --sidebar-background: 225 25% 15%;
+        --sidebar-foreground: 210 10% 85%;
+        --sidebar-primary: 170 38% 17%;
+        --sidebar-primary-foreground: 0 0% 100%;
+        --sidebar-accent: 215 25% 25%;
+        --sidebar-accent-foreground: 0 0% 95%;
+        --sidebar-border: 215 25% 25%;
+        --sidebar-ring: 170 38% 17%;
+    }
+}
+
+@layer base {
+    * {
+        @apply border-border;
+    }
+
+    body {
+        @apply bg-background text-foreground;
+        letter-spacing: 0.025em;
+        line-height: 1.6;
+    }
+
+    @font-face {
+        font-family: "geist";
+        font-style: normal;
+        font-weight: 100 900;
+        src: url(/fonts/geist.woff2) format("woff2");
+    }
+
+    @font-face {
+        font-family: "geist-mono";
+        font-style: normal;
+        font-weight: 100 900;
+        src: url(/fonts/geist-mono.woff2) format("woff2");
+    }
+}
+
+.skeleton {
+    * {
+        pointer-events: none !important;
+    }
+
+    *[class^="text-"] {
+        color: transparent;
+        @apply rounded-md bg-foreground/20 select-none animate-pulse;
+    }
+
+    .skeleton-bg {
+        @apply bg-foreground/10;
+    }
+
+    .skeleton-div {
+        @apply bg-foreground/20 animate-pulse;
+    }
+}
+
+.ProseMirror {
+    outline: none;
+}
+
+.cm-editor,
+.cm-gutters {
+    @apply bg-background dark:bg-zinc-800 outline-none selection:bg-zinc-900 !important;
+}
+
+.ͼo.cm-focused>.cm-scroller>.cm-selectionLayer .cm-selectionBackground,
+.ͼo.cm-selectionBackground,
+.ͼo.cm-content::selection {
+    @apply bg-zinc-200 dark:bg-zinc-900 !important;
+}
+
+.cm-activeLine,
+.cm-activeLineGutter {
+    @apply bg-transparent !important;
+}
+
+.cm-activeLine {
+    @apply rounded-r-sm !important;
+}
+
+.cm-lineNumbers {
+    @apply min-w-7;
+}
+
+.cm-foldGutter {
+    @apply min-w-3;
+}
+
+.cm-lineNumbers .cm-activeLineGutter {
+    @apply rounded-l-sm !important;
+}
+
+.suggestion-highlight {
+    @apply bg-blue-200 hover:bg-blue-300 dark:hover:bg-blue-400/50 dark:text-blue-50 dark:bg-blue-500/40;
+}
