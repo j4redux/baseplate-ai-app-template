@@ -73,17 +73,27 @@ export function processText(text: string, options: TextProcessingOptions = {}): 
   if (preserveNewlines) {
     // When preserving newlines, only normalize spaces while keeping newlines intact
     processed = processed
-      .replace(/([.!?])(?!["'.'])/g, '$1 ')
+      .replace(/([.!?])(?!["'.])/g, '$1 ')
       // Replace multiple spaces with a single space, but preserve newlines
       .replace(/[^\S\n]+/g, ' ')
       .trim();
   } else {
     // Standard whitespace normalization when not preserving newlines
     processed = processed
-      .replace(/([.!?])(?!["'.'])/g, '$1 ')
+      .replace(/([.!?])(?!["'.])/g, '$1 ')
       .replace(/\s+/g, ' ')
       .trim();
   }
+  
+  // Fix spacing issues in common technical terms with periods
+  processed = processed
+    .replace(/Next\. js/g, 'Next.js')
+    .replace(/Node\. js/g, 'Node.js')
+    .replace(/Type\. ?Script/g, 'TypeScript')
+    .replace(/Java\. ?Script/g, 'JavaScript')
+    .replace(/React\. ?js/g, 'React.js')
+    .replace(/Vue\. ?js/g, 'Vue.js')
+    .replace(/(\d+)\. (\d+)\. (\d+)/g, '$1.$2.$3'); // Fix version numbers like 1. 2. 3
 
   return processed;
 }
