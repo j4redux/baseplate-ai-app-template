@@ -2,7 +2,7 @@
 
 import type { ChatRequestOptions, Message } from 'ai';
 
-import { processText } from '@/lib/utils';
+import { processText, formatTemperatures } from '@/lib/utils';
 
 interface TextContent {
   readonly type: 'text';
@@ -27,11 +27,16 @@ function formatMessageContent(content: Message['content']): string {
     const isDocument = /^#{1,6}\s+\w+/.test(firstLine);
     
     // Process text based on whether it's a document or message
-    return processText(text, {
+    let processed = processText(text, {
       preserveNewlines: true, // Preserve newlines for all message types
       preserveMarkdownHeadings: isDocument, // Only preserve headings for documents
       preserveSpaces: true
     }).trim();
+    
+    // Apply temperature formatting with proper bold styling and spacing
+    processed = formatTemperatures(processed);
+    
+    return processed;
   };
   
   if (typeof content === 'string') return processRegularText(content);

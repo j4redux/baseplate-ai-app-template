@@ -220,14 +220,19 @@ const messageComponents: Components = {
 
 const remarkPlugins = [remarkGfm];
 
-const NonMemoizedMarkdown: React.FC<MarkdownProps> = ({ children, isDocument = false }) => (
-  <ReactMarkdown 
-    remarkPlugins={remarkPlugins}
-    components={isDocument ? documentComponents : messageComponents}
-  >
-    {children || ''}
-  </ReactMarkdown>
-);
+const NonMemoizedMarkdown: React.FC<MarkdownProps> = ({ children, isDocument = false }) => {
+  // Process the content, ensuring null/undefined check
+  const content = children || '';
+  
+  return (
+    <ReactMarkdown 
+      remarkPlugins={remarkPlugins}
+      components={isDocument ? documentComponents : messageComponents}
+    >
+      {content}
+    </ReactMarkdown>
+  );
+};
 
 export const Markdown = memo(
   NonMemoizedMarkdown,

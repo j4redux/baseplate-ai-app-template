@@ -13,6 +13,25 @@ interface TextProcessingOptions {
   readonly preserveMarkdownHeadings?: boolean;
 }
 
+// Helper function to ensure temperature values are properly formatted with bold markdown
+// This ensures consistent formatting of temperature values with proper spacing
+export function formatTemperatures(text: string): string {
+  // First, make sure we fix any spacing issues with temperature values
+  let result = text
+    // Fix spacing in temperatures with decimal points (e.g., "15. 9°C" -> "15.9°C")
+    .replace(/(\d+)\.(\s*)(\d+)(\s*)°([CF])/g, '$1.$3°$5');
+  
+  // Handle temperature ranges (e.g., "10-11°C" -> "**10-11°C**")
+  result = result.replace(/(\d+[\.\d]*)-(\d+[\.\d]*)°([CF])/g, '**$1-$2°$3**');
+  
+  // Handle regular temperature values (make sure not to process already formatted ranges)
+  result = result
+    .replace(/(?<!\*\*)\b(\d+\.\d+)°([CF])\b(?!\*\*)/g, '**$1°$2**')
+    .replace(/(?<!\*\*)\b(\d+)°([CF])\b(?!\*\*)/g, '**$1°$2**');
+    
+  return result;
+}
+
 export function processText(text: string, options: TextProcessingOptions = {}): string {
   const { 
     preserveNewlines = false, 
