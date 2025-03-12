@@ -482,6 +482,7 @@ function PureArtifact({
                 metadata={{
                   ...metadata,
                   outputs: [], // Add the missing outputs property to satisfy the type requirement
+                  // Remove documentContent from here as it's not in the ArtifactMetadata type
                 }}
                 setMetadata={(updater) => {
                   // Handle the metadata update while preserving the outputs property

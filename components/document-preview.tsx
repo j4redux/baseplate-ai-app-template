@@ -5,8 +5,10 @@ import {
   MouseEvent,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
+  useState,
 } from 'react';
 import { ArtifactKind, UIArtifact } from './artifact';
 import { FileIcon, FullscreenIcon, ImageIcon, LoaderIcon } from './icons';
@@ -58,7 +60,44 @@ export function DocumentPreview({
     }
   }, [artifact.documentId, setArtifact]);
 
+  // When the artifact is visible, prioritize showing the document content
   if (artifact.isVisible) {
+    // CRITICAL: If we're streaming, we want to show the document content directly
+    // This ensures real-time streaming directly into the interface
+    if (artifact.status === 'streaming') {
+      // Always create a streaming document object, even if content is empty
+      // This ensures we have a container ready to receive streaming content
+      const streamingDocument: Document = {
+        id: artifact.documentId || 'streaming-doc',
+        title: artifact.title || (result?.title || args?.title || 'Untitled Document'),
+        kind: artifact.kind,
+        content: artifact.content || '', // Use empty string if content is null/undefined
+        createdAt: new Date(),
+        userId: 'streaming-user'
+      };
+      
+      console.log('[DocumentPreview] Showing streaming document:', {
+        contentLength: artifact.content?.length || 0,
+        title: streamingDocument.title,
+        timestamp: new Date().toISOString(),
+        isStreaming: true
+      });
+      
+      // Return the streaming document view immediately
+      // This bypasses any loading states or skeleton loaders
+      return (
+        <div className="relative w-full cursor-pointer">
+          <DocumentHeader
+            title={streamingDocument.title}
+            kind={streamingDocument.kind}
+            isStreaming={true}
+          />
+          <DocumentContent document={streamingDocument} />
+        </div>
+      );
+    }
+    
+    // For non-streaming cases, use the original logic
     if (result) {
       return (
         <DocumentToolResult
@@ -80,24 +119,43 @@ export function DocumentPreview({
     }
   }
 
-  if (isDocumentsFetching) {
-    return <LoadingSkeleton artifactKind={result.kind ?? args.kind} />;
-  }
-
+  // Important: For streaming documents, we want to show the content as it's being generated
+  // rather than showing a loading skeleton
   const document: Document | null = previewDocument
     ? previewDocument
     : artifact.status === 'streaming'
       ? {
-          title: artifact.title,
+          title: artifact.title || 'Untitled Document',
           kind: artifact.kind,
+          // Ensure we always have the most up-to-date content during streaming
+          // This is critical for real-time text streaming
           content: artifact.content,
           id: artifact.documentId,
           createdAt: new Date(),
           userId: 'noop',
         }
       : null;
+      
+  // Note: We don't force visibility changes here anymore
+  // This is to respect the memory about not opening artifact panels randomly
+  // Instead, we ensure that when the artifact IS visible, it shows streaming content
 
+  // Only show loading skeleton if we're fetching documents and not streaming
+  if (isDocumentsFetching && artifact.status !== 'streaming') {
+    return <LoadingSkeleton artifactKind={result?.kind ?? args?.kind ?? artifact.kind} />;
+  }
+
+  // If we don't have a document and we're not streaming, show loading skeleton
   if (!document) return <LoadingSkeleton artifactKind={artifact.kind} />;
+
+  // Add debug logging to help diagnose the issue
+  console.log(`[DocumentPreview] Rendering document:`, {
+    documentId: document.id,
+    title: document.title,
+    contentLength: document.content?.length || 0,
+    isStreaming: artifact.status === 'streaming',
+    artifactContent: artifact.content?.length || 0
+  });
 
   return (
     <div className="relative w-full cursor-pointer">
@@ -154,25 +212,22 @@ const PureHitboxLayer = ({
 }) => {
   const handleClick = useCallback(
     (event: MouseEvent<HTMLElement>) => {
+      // Only when the user explicitly clicks should we make the artifact visible
       const boundingBox = event.currentTarget.getBoundingClientRect();
 
-      setArtifact((artifact) =>
-        artifact.status === 'streaming'
-          ? { ...artifact, isVisible: true }
-          : {
-              ...artifact,
-              title: result.title,
-              documentId: result.id,
-              kind: result.kind,
-              isVisible: true,
-              boundingBox: {
-                left: boundingBox.x,
-                top: boundingBox.y,
-                width: boundingBox.width,
-                height: boundingBox.height,
-              },
-            },
-      );
+      setArtifact((artifact) => ({
+        ...artifact,
+        title: result?.title || artifact.title,
+        documentId: result?.id || artifact.documentId,
+        kind: result?.kind || artifact.kind,
+        isVisible: true, // Only set to visible on explicit user click
+        boundingBox: {
+          left: boundingBox.x,
+          top: boundingBox.y,
+          width: boundingBox.width,
+          height: boundingBox.height,
+        },
+      }));
     },
     [setArtifact, result],
   );
@@ -237,6 +292,12 @@ const DocumentHeader = memo(PureDocumentHeader, (prevProps, nextProps) => {
 const DocumentContent = ({ document }: { document: Document }) => {
   const { artifact } = useArtifact();
 
+  // Add debug logging to track document content during streaming
+  console.log(`[DocumentContent] Rendering with status: ${artifact.status}`, {
+    documentContent: document.content?.length || 0,
+    artifactContent: artifact.content?.length || 0
+  });
+
   const containerClassName = cn(
     'h-[257px] overflow-y-scroll border rounded-b-2xl dark:bg-muted border-t-0 dark:border-zinc-700',
     {
@@ -245,8 +306,24 @@ const DocumentContent = ({ document }: { document: Document }) => {
     },
   );
 
+  // CRITICAL: When streaming, always prioritize the artifact content which is updated in real-time
+  // This ensures we show the latest content as it streams in directly from the server
+  // The artifact.content is updated immediately by the data-stream-handler for each text-delta event
+  const contentToShow = 
+    artifact.status === 'streaming' ? 
+      artifact.content || '' : 
+      document.content ?? '';
+      
+  // Use useLayoutEffect to ensure the DOM is updated synchronously after React renders
+  // This helps prevent flickering during streaming updates
+  useLayoutEffect(() => {
+    if (artifact.status === 'streaming' && artifact.content) {
+      console.log('[DocumentContent] Layout effect during streaming update');
+    }
+  }, [artifact.status, artifact.content]);
+
   const commonProps = {
-    content: document.content ?? '',
+    content: contentToShow,
     isCurrentVersion: true,
     currentVersionIndex: 0,
     status: artifact.status,

@@ -64,6 +64,7 @@ type ArtifactConfig<T extends string, M = any> = {
     setMetadata: Dispatch<SetStateAction<M>>;
     setArtifact: Dispatch<SetStateAction<UIArtifact>>;
     streamPart: DataStreamDelta;
+    debug?: boolean; // Add optional debug flag
   }) => void;
 };
 
@@ -78,6 +79,7 @@ export class Artifact<T extends string, M = any> {
     setMetadata: Dispatch<SetStateAction<M>>;
     setArtifact: Dispatch<SetStateAction<UIArtifact>>;
     streamPart: DataStreamDelta;
+    debug?: boolean; // Add optional debug parameter
   }) => void;
 
   constructor(config: ArtifactConfig<T, M>) {

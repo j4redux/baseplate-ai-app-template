@@ -94,6 +94,8 @@ export function processText(text: string, options: TextProcessingOptions = {}): 
     .replace(/React\. ?js/g, 'React.js')
     .replace(/Vue\. ?js/g, 'Vue.js')
     .replace(/(\d+)\. (\d+)\. (\d+)/g, '$1.$2.$3'); // Fix version numbers like 1. 2. 3
+    
+
 
   return processed;
 }

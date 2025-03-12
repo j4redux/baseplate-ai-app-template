@@ -181,3 +181,25 @@
 .suggestion-highlight {
     @apply bg-blue-200 hover:bg-blue-300 dark:hover:bg-blue-400/50 dark:text-blue-50 dark:bg-blue-500/40;
 }
+
+/* Ensure consistent formatting during streaming */
+.streaming-content .ProseMirror {
+    @apply prose-headings:font-bold prose-h1:text-3xl prose-h2:text-2xl prose-h3:text-xl
+           prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-1
+           prose-pre:bg-muted prose-pre:p-2 prose-pre:rounded-md
+           prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded-sm
+           prose-blockquote:border-l-4 prose-blockquote:border-muted-foreground prose-blockquote:pl-4 prose-blockquote:italic;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+/* Ensure consistent document formatting */
+.document-format .ProseMirror {
+    @apply prose-headings:font-bold prose-h1:text-3xl prose-h2:text-2xl prose-h3:text-xl
+           prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-1
+           prose-pre:bg-muted prose-pre:p-2 prose-pre:rounded-md
+           prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded-sm
+           prose-blockquote:border-l-4 prose-blockquote:border-muted-foreground prose-blockquote:pl-4 prose-blockquote:italic;
+    white-space: pre-wrap;
+    word-break: break-word;
+}

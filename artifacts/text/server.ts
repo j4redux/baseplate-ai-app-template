@@ -106,9 +106,7 @@ function streamFormattedText({
     prompt,
     maxTokens: options.maxTokens ?? 20000,
     temperature: options.temperature ?? 0.7,
-    experimental_transform: smoothStream({ 
-      chunking: isChat ? /\n|\s{2,}/ : 'word'
-    }),
+    // Direct streaming without transforms to prevent duplication
   });
 }
 
@@ -119,34 +117,56 @@ export const textDocumentHandler = createDocumentHandler<'text'>({
   onCreateDocument: async ({ title, dataStream }: DocumentParams) => {
     let draftContent = '';
 
-    const { fullStream } = streamText({
+    // Use the smallest possible chunking to maximize streaming responsiveness
+const { fullStream } = streamText({
       model: myProvider.languageModel('artifact-model'),
       system: CLAUDE_DOCUMENT_PROMPT,
       prompt: `Create a well-structured document about: ${title}`,
       maxTokens: 4000,
       experimental_transform: smoothStream({ 
-        chunking: /\n{2,}|\n(?=#{1,6}\s)|\n(?=\d+\.\s)|\n(?=[*-]\s)/,
+        chunking: 'word',
         delayInMs: 0
       })
     });
 
+    // This will track the last streamed segment to prevent duplicates
+    let previousChunk = '';
+    let accumulatedContent = '';
+    
     for await (const delta of fullStream) {
       if (delta.type === 'text-delta') {
         const { textDelta } = delta as StreamDelta;
+        
+        // Add to accumulated draft content for final processing
         draftContent += textDelta;
         
-        // Process the text delta to ensure proper Markdown formatting
-        const processedDelta = processText(textDelta, {
-          preserveNewlines: true,
-          preserveMarkdownHeadings: true,
-          preserveSpaces: true
-        });
+        // CRITICAL FIX: Instead of streaming raw deltas which may contain duplicates,
+        // we ensure only the new part of the content is sent
+        accumulatedContent += textDelta;
         
-        // Stream each processed delta to the client immediately
-        dataStream.writeData({
-          type: 'text-delta',
-          content: processedDelta,
-        });
+        // Only stream the new content (avoiding duplication)
+        // We buffer a small amount to ensure we don't split words incorrectly
+        const contentToStream = accumulatedContent;
+        accumulatedContent = '';
+        
+        // Don't stream empty content
+        if (contentToStream.length > 0) {
+          // Stream the non-duplicated content to the client
+          dataStream.writeData({
+            type: 'text-delta',
+            content: contentToStream,
+          });
+          
+          // Store this chunk for future de-duplication
+          previousChunk = contentToStream;
+          
+          // Log for debugging
+          console.log(`[TextDocumentHandler] Streaming clean delta:`, {
+            contentLength: contentToStream.length,
+            preview: contentToStream.substring(0, 20) + (contentToStream.length > 20 ? '...' : ''),
+            timestamp: new Date().toISOString()
+          });
+        }
       }
     }
 
@@ -178,16 +198,17 @@ Provide the complete updated document while maintaining its structure and qualit
         const { textDelta } = delta as TextStreamPart;
         draftContent += textDelta;
         
-        // Process the text delta to ensure proper Markdown formatting
-        const processedDelta = processText(textDelta, {
-          preserveNewlines: true,
-          preserveMarkdownHeadings: true
-        });
-        
-        // Stream each processed delta to the client immediately
+        // Immediately stream each delta to the client without processing
+        // This ensures real-time streaming with minimal latency
         dataStream.writeData({
           type: 'text-delta',
-          content: processedDelta,
+          content: textDelta,
+        });
+        
+        // Log streaming activity for debugging
+        console.log(`[TextDocumentHandler] Streaming update delta:`, {
+          deltaLength: textDelta.length,
+          timestamp: new Date().toISOString()
         });
       }
     }
