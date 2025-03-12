@@ -103,7 +103,7 @@ function PureArtifact({
     isLoading: isDocumentsFetching,
     mutate: mutateDocuments,
   } = useSWR<Array<Document>>(
-    artifact.documentId !== 'init' && artifact.status !== 'streaming'
+    artifact.documentId !== 'init'
       ? `/api/document?id=${artifact.documentId}`
       : null,
     fetcher,
@@ -131,8 +131,11 @@ function PureArtifact({
   }, [documents, setArtifact]);
 
   useEffect(() => {
-    mutateDocuments();
-  }, [artifact.status, mutateDocuments]);
+    // Force a revalidation when streaming completes to ensure we have the latest data
+    if (artifact.status === 'idle' && artifact.documentId !== 'init') {
+      mutateDocuments();
+    }
+  }, [artifact.status, artifact.documentId, mutateDocuments]);
 
   const { mutate } = useSWRConfig();
   const [isContentDirty, setIsContentDirty] = useState(false);
@@ -476,8 +479,24 @@ function PureArtifact({
                 isCurrentVersion={isCurrentVersion}
                 getDocumentContentById={getDocumentContentById}
                 isLoading={isDocumentsFetching && !artifact.content}
-                metadata={metadata}
-                setMetadata={setMetadata}
+                metadata={{
+                  ...metadata,
+                  outputs: [], // Add the missing outputs property to satisfy the type requirement
+                }}
+                setMetadata={(updater) => {
+                  // Handle the metadata update while preserving the outputs property
+                  if (typeof updater === 'function') {
+                    setMetadata((current) => {
+                      const result = updater(current);
+                      return result;
+                    });
+                  } else {
+                    setMetadata((current) => ({
+                      ...current,
+                      ...updater,
+                    }));
+                  }
+                }}
               />
 
               <AnimatePresence>

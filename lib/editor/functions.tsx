@@ -12,7 +12,8 @@ import { createSuggestionWidget, type UISuggestion } from './suggestions';
 
 export const buildDocumentFromContent = (content: string) => {
   const parser = DOMParser.fromSchema(documentSchema);
-  const stringFromMarkdown = renderToString(<Markdown>{content}</Markdown>);
+  // Use isDocument=true to ensure proper document-style markdown rendering
+  const stringFromMarkdown = renderToString(<Markdown isDocument={true}>{content}</Markdown>);
   const tempContainer = document.createElement('div');
   tempContainer.innerHTML = stringFromMarkdown;
   return parser.parse(tempContainer);

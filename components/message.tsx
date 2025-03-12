@@ -22,14 +22,11 @@ function isTextContent(content: unknown): content is TextContent {
 
 function formatMessageContent(content: Message['content']): string {
   const processRegularText = (text: string): string => {
-    // Determine if this is a document-style message
-    const firstLine = text.trim().split('\n')[0];
-    const isDocument = /^#{1,6}\s+\w+/.test(firstLine);
-    
-    // Process text based on whether it's a document or message
+    // Always preserve markdown formatting for all message types
+    // This ensures consistent rendering both during streaming and after reload
     let processed = processText(text, {
       preserveNewlines: true, // Preserve newlines for all message types
-      preserveMarkdownHeadings: isDocument, // Only preserve headings for documents
+      preserveMarkdownHeadings: true, // Always preserve headings for all content
       preserveSpaces: true
     }).trim();
     
@@ -49,7 +46,6 @@ function formatMessageContent(content: Message['content']): string {
 
   // Join parts with proper spacing
   return processRegularText(textParts.join('\n\n'));
-
 }
 import cx from 'classnames';
 import { AnimatePresence, motion } from 'framer-motion';

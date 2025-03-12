@@ -30,6 +30,7 @@ type EditorProps = {
   isCurrentVersion: boolean;
   currentVersionIndex: number;
   suggestions: Array<Suggestion>;
+  isDocument?: boolean; // Optional flag to indicate document-style rendering
 };
 
 function PureEditor({
@@ -37,6 +38,7 @@ function PureEditor({
   onSaveContent,
   suggestions,
   status,
+  isDocument = false, // Default to false for backward compatibility
 }: EditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<EditorView | null>(null);
@@ -146,7 +148,10 @@ function PureEditor({
   }, [suggestions, content]);
 
   return (
-    <div className="relative prose dark:prose-invert" ref={containerRef} />
+    <div 
+      className={`relative prose dark:prose-invert ${isDocument ? 'document-format' : ''}`} 
+      ref={containerRef} 
+    />
   );
 }
 
@@ -155,6 +160,7 @@ function areEqual(prevProps: EditorProps, nextProps: EditorProps) {
     prevProps.suggestions === nextProps.suggestions &&
     prevProps.currentVersionIndex === nextProps.currentVersionIndex &&
     prevProps.isCurrentVersion === nextProps.isCurrentVersion &&
+    prevProps.isDocument === nextProps.isDocument &&
     !(prevProps.status === 'streaming' && nextProps.status === 'streaming') &&
     prevProps.content === nextProps.content &&
     prevProps.onSaveContent === nextProps.onSaveContent

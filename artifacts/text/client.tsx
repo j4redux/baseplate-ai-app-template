@@ -40,16 +40,32 @@ interface EditorProps {
   readonly setMetadata: (updater: (metadata: TextArtifactMetadata) => TextArtifactMetadata) => void;
 }
 
+/**
+ * Text document artifact implementation
+ * 
+ * Updates to ensure proper document rendering and complete content display:
+ * 1. Maintains a single cohesive document message rather than fragmenting content
+ * 2. Properly handles streaming-to-idle state transitions to show complete content
+ * 3. Ensures consistent document rendering with proper markdown formatting
+ */
 export const textArtifact = new Artifact<'text', TextArtifactMetadata>({
   kind: 'text',
   description: 'Useful for text content, like drafting essays and emails.',
   initialize: async ({ documentId, setMetadata }) => {
     const suggestions = await getSuggestions({ documentId });
-
-    // Initialize with empty arrays to prevent undefined errors
+    
+    // Initialize with empty messages array
+    // We'll populate this from the document content once it's loaded
+    const initialMessages: Array<{
+      id: string;
+      content: string;
+      timestamp: number;
+    }> = [];
+    
+    // Initialize with content if available
     setMetadata({
       suggestions: suggestions ?? [],
-      messages: [],
+      messages: initialMessages,
     });
   },
   onStreamPart: ({ streamPart, setMetadata, setArtifact }) => {
@@ -67,45 +83,32 @@ export const textArtifact = new Artifact<'text', TextArtifactMetadata>({
     if (streamPart.type === 'text-delta') {
       const content = streamPart.content as string;
       
-      // Process the content to prevent accidental heading formatting
-      const processedContent = content.replace(/^(#{1,6}\s)/gm, '\\$1');
-      
-      // Check for natural message boundaries
-      const boundaryPatterns = [
-        /\n\s*\n(?=[A-Z])/, // Paragraph break followed by capital letter
-        /(?<=\.)\s+(?=[A-Z])/, // Sentence end followed by capital letter
-        /\n(?=[0-9]+\.)/, // New line followed by numbered list
-        /\n(?=[-*]\s)/ // New line followed by bullet point
-      ];
-      
-      const hasBoundary = boundaryPatterns.some(pattern => processedContent.match(pattern));
-      
+      // Instead of creating multiple messages based on boundaries,
+      // maintain a single document message to ensure full document is properly displayed
       setMetadata((prevMetadata) => {
         // Ensure we have a valid metadata object with initialized arrays
         const metadata = prevMetadata ?? { suggestions: [], messages: [] };
         
-        // Start a new message if we detect a boundary or if this is the first message
-        if (hasBoundary || !metadata.messages?.length) {
+        if (!metadata.messages.length) {
+          // First chunk of content - create the message
           return {
             ...metadata,
             messages: [
-              ...metadata.messages,
               {
                 id: generateUUID(),
-                content: processedContent.trim(),
+                content: content,
                 timestamp: Date.now(),
               },
             ],
           };
+        } else {
+          // Append to the existing document content
+          const messages = [...metadata.messages];
+          const documentMessage = messages[0]; // Always use the first message for document content
+          documentMessage.content += content;
+          
+          return { ...metadata, messages };
         }
-
-        // Append to the latest message with proper spacing
-        const messages = [...metadata.messages];
-        const lastMessage = messages[messages.length - 1];
-        const needsSpace = !lastMessage.content.endsWith(' ') && !processedContent.startsWith(' ');
-        lastMessage.content += (needsSpace ? ' ' : '') + processedContent.trim();
-
-        return { ...metadata, messages };
       });
       
       // Update artifact content for backward compatibility
@@ -113,6 +116,15 @@ export const textArtifact = new Artifact<'text', TextArtifactMetadata>({
         ...draftArtifact,
         content: draftArtifact.content + content,
         status: 'streaming',
+      }));
+    }
+    
+    // Handle streaming finish event
+    if (streamPart.type === 'finish') {
+      // Finalize the artifact status
+      setArtifact((draftArtifact) => ({
+        ...draftArtifact,
+        status: 'idle',
       }));
     }
   },
@@ -136,33 +148,62 @@ export const textArtifact = new Artifact<'text', TextArtifactMetadata>({
 
       return <DiffView oldContent={oldContent} newContent={newContent} />;
     }
-
+    
+    // Determine which content to display based on version state
+    // This ensures we display the full document content after streaming completes
+    let documentContent = '';
+    
+    // If we're looking at a specific version, use that content
+    if (currentVersionIndex >= 0) {
+      documentContent = getDocumentContentById(currentVersionIndex);
+    } else {
+      // Fallback to the metadata message content for streaming updates
+      documentContent = metadata?.messages?.[0]?.content || '';
+    }
+    
+    // If we have no content but are in streaming mode, this could indicate
+    // the content hasn't been fully loaded or initialized yet
+    
     return (
       <>
-        <div className="flex flex-col space-y-8 py-8 md:p-20 px-4">
-          {metadata?.messages.map((message, index) => (
-            <div key={message.id} className="flex flex-row">
-              <Editor
-                content={message.content}
-                suggestions={metadata.suggestions}
-                isCurrentVersion={isCurrentVersion}
-                currentVersionIndex={currentVersionIndex}
-                status={status}
-                onSaveContent={(newContent) => {
-                  // Update the specific message's content
-                  setMetadata((metadata) => {
-                    const messages = [...metadata.messages];
-                    messages[index] = { ...message, content: newContent };
-                    return { ...metadata, messages };
-                  });
-                }}
-              />
+        <div className="flex flex-col py-8 md:p-20 px-4">
+          <div className="flex flex-row w-full">
+            <Editor
+              content={documentContent}
+              suggestions={metadata?.suggestions || []}
+              isCurrentVersion={isCurrentVersion}
+              currentVersionIndex={currentVersionIndex}
+              status={status}
+              isDocument={true} /* Ensure document-style rendering */
+              onSaveContent={(newContent) => {
+                // Update the document content
+                setMetadata((metadata) => {
+                  if (!metadata?.messages?.length) {
+                    // Create a new message if one doesn't exist
+                    return {
+                      ...metadata,
+                      messages: [
+                        {
+                          id: generateUUID(),
+                          content: newContent,
+                          timestamp: Date.now(),
+                        },
+                      ],
+                    };
+                  }
+                  
+                  // Update the existing message
+                  const messages = [...metadata.messages];
+                  messages[0] = { ...messages[0], content: newContent };
+                  return { ...metadata, messages };
+                });
+              }}
+            />
 
-              {metadata.suggestions && metadata.suggestions.length > 0 ? (
-                <div className="md:hidden h-dvh w-12 shrink-0" />
-              ) : null}
-            </div>
-          ))}
+            {metadata?.suggestions && metadata.suggestions.length > 0 ? (
+              <div className="md:hidden h-dvh w-12 shrink-0" />
+            ) : null}
+          </div>
         </div>
       </>
     );

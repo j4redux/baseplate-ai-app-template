@@ -211,8 +211,12 @@ export function convertToUIMessages(
         .filter((part): part is MessageContent & { type: 'text'; text: string } =>
           part.type === 'text' && typeof part.text === 'string'
         )
-        .map(part => processText(part.text))
-        .join(' ');
+        .map(part => processText(part.text, {
+          preserveNewlines: true,
+          preserveMarkdownHeadings: true,
+          preserveSpaces: true
+        }))
+        .join('\n\n');
       
       // Process tool calls and reasoning after text is properly formatted
       content.forEach((part) => {
@@ -241,7 +245,15 @@ export function convertToUIMessages(
     };
 
     const { text, reasoning, toolInvocations } = typeof message.content === 'string'
-      ? { text: message.content, reasoning: undefined, toolInvocations: [] }
+      ? { 
+          text: processText(message.content, {
+            preserveNewlines: true,
+            preserveMarkdownHeadings: true,
+            preserveSpaces: true
+          }), 
+          reasoning: undefined, 
+          toolInvocations: [] 
+        }
       : processContent(message.content as MessageContent[]);
 
     chatMessages.push({
