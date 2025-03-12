@@ -191,7 +191,8 @@ function addToolMessageToChat({
 export function convertToUIMessages(
   messages: readonly DBMessage[],
 ): Message[] {
-  return messages.reduce<Message[]>((chatMessages, message) => {
+  // First pass: process messages normally
+  const processedMessages = messages.reduce<Message[]>((chatMessages, message) => {
     if (message.role === 'tool') {
       return addToolMessageToChat({
         toolMessage: message as CoreToolMessage,
@@ -268,11 +269,91 @@ export function convertToUIMessages(
 
     return chatMessages;
   }, []);
+
+  // Second pass: identify and merge document-related messages
+  const result: Message[] = [];
+  let i = 0;
+
+  while (i < processedMessages.length) {
+    const current = processedMessages[i];
+    
+    // Check if this is an assistant message that might be part of a document flow
+    if (current.role === 'assistant') {
+      // Look ahead to see if the next message is also from the assistant and contains document tools
+      const next = i < processedMessages.length - 1 ? processedMessages[i + 1] : null;
+      
+      // Check if we should merge these messages (both are assistant messages and one has document tools)
+      const shouldMerge = next && 
+                          next.role === 'assistant' && 
+                          (hasDocumentTools(current) || hasDocumentTools(next));
+      
+      if (shouldMerge) {
+        // Create a merged message
+        const mergedMessage: Message = {
+          ...current,
+          content: combineContent(current.content, next.content),
+          toolInvocations: [
+            ...(current.toolInvocations || []),
+            ...(next.toolInvocations || [])
+          ]
+        };
+        
+        result.push(mergedMessage);
+        i += 2; // Skip the next message since we merged it
+      } else {
+        // No need to merge, add the current message as is
+        result.push(current);
+        i++;
+      }
+    } else {
+      // Not an assistant message, add as is
+      result.push(current);
+      i++;
+    }
+  }
+
+  return result;
+}
+
+// Helper function to check if a message has document-related tool invocations
+function hasDocumentTools(message: Message): boolean {
+  return message.toolInvocations?.some(tool => 
+    ['createDocument', 'updateDocument'].includes(tool.toolName)
+  ) || false;
+}
+
+// Helper function to combine content from two messages with consistent formatting
+function combineContent(content1: string, content2: string): string {
+  if (!content1) return content2 || '';
+  if (!content2) return content1 || '';
+  
+  // Normalize line breaks in both contents
+  const normalizedContent1 = content1.trim().replace(/\n{3,}/g, '\n\n');
+  const normalizedContent2 = content2.trim().replace(/\n{3,}/g, '\n\n');
+  
+  // Check for document creation patterns that should be kept on the same line
+  const documentIntroPattern = /Let me create a document for you with a structured essay on this topic\./i;
+  
+  // If content2 starts with "I've created" and content1 ends with document intro,
+  // we want to keep them on the same line for consistent formatting
+  if (normalizedContent1.match(documentIntroPattern) && 
+      normalizedContent2.trim().startsWith("I've created")) {
+    // Join without paragraph break to match streaming format
+    return normalizedContent1 + ' ' + normalizedContent2;
+  }
+  
+  // For other cases, add proper spacing between contents
+  return normalizedContent1 + (normalizedContent1.endsWith('\n\n') ? '' : '\n\n') + normalizedContent2;
 }
 
 type ResponseMessageWithoutId = CoreToolMessage | CoreAssistantMessage;
 type ResponseMessage = ResponseMessageWithoutId & { id: string };
 
+/**
+ * Sanitizes response messages before saving to the database.
+ * Ensures consistent formatting between streaming and post-refresh states.
+ * This is critical for document display consistency in the UI.
+ */
 export function sanitizeResponseMessages({
   messages,
   reasoning,
@@ -280,8 +361,11 @@ export function sanitizeResponseMessages({
   messages: Array<ResponseMessage>;
   reasoning: string | undefined;
 }) {
+  // Extract all valid tool result IDs to ensure complete tool chains
   const toolResultIds: Array<string> = [];
+  const toolCallIds: Array<string> = [];
 
+  // First pass: collect all tool call and result IDs
   for (const message of messages) {
     if (message.role === 'tool') {
       for (const content of message.content) {
@@ -289,22 +373,34 @@ export function sanitizeResponseMessages({
           toolResultIds.push(content.toolCallId);
         }
       }
+    } else if (message.role === 'assistant') {
+      if (Array.isArray(message.content)) {
+        for (const content of message.content) {
+          if (content.type === 'tool-call') {
+            toolCallIds.push(content.toolCallId);
+          }
+        }
+      }
     }
   }
 
+  // Process each message to ensure consistent format
   const messagesBySanitizedContent = messages.map((message) => {
     if (message.role !== 'assistant') return message;
 
+    // Handle string content (should be preserved)
     if (typeof message.content === 'string') return message;
 
+    // Filter content to ensure complete tool chains and valid text content
     const sanitizedContent = message.content.filter((content) =>
       content.type === 'tool-call'
-        ? toolResultIds.includes(content.toolCallId)
+        ? toolResultIds.includes(content.toolCallId) // Only keep tool calls with results
         : content.type === 'text'
-          ? content.text.length > 0
-          : true,
+          ? content.text.length > 0 // Only keep non-empty text
+          : true, // Keep other content types as is
     );
 
+    // Add reasoning if available (helps with UI context)
     if (reasoning) {
       // @ts-expect-error: reasoning message parts in sdk is wip
       sanitizedContent.push({ type: 'reasoning', reasoning });
@@ -316,42 +412,91 @@ export function sanitizeResponseMessages({
     };
   });
 
+  // Only return messages with actual content
   return messagesBySanitizedContent.filter(
     (message) => message.content.length > 0,
   );
 }
 
+/**
+ * Sanitizes messages for UI display to ensure consistent presentation.
+ * This function is critical for maintaining document display consistency
+ * between initial streaming and post-refresh states.
+ */
 export function sanitizeUIMessages(messages: Array<Message>): Array<Message> {
-  const messagesBySanitizedToolInvocations = messages.map((message) => {
-    if (message.role !== 'assistant') return message;
-
-    if (!message.toolInvocations) return message;
-
-    const toolResultIds: Array<string> = [];
-
-    for (const toolInvocation of message.toolInvocations) {
-      if (toolInvocation.state === 'result') {
-        toolResultIds.push(toolInvocation.toolCallId);
-      }
+  // Simple approach: Identify consecutive assistant messages where the second message
+  // contains document-related content and merge them together
+  
+  // Clone messages to avoid mutating the original array
+  const result: Message[] = [];
+  let skipNext = false;
+  
+  // Document-related patterns to identify document content in messages
+  const documentPatterns = [
+    /I('ve| have) created (a|an) .* document/i,
+    /Would you like me to (help develop|update)/i,
+    /Here('s| is) (what I'll cover|an outline|a draft)/i,
+  ];
+  
+  for (let i = 0; i < messages.length; i++) {
+    // Skip this message if it was already merged with a previous one
+    if (skipNext) {
+      skipNext = false;
+      continue;
     }
-
-    const sanitizedToolInvocations = message.toolInvocations.filter(
-      (toolInvocation) =>
-        toolInvocation.state === 'result' ||
-        toolResultIds.includes(toolInvocation.toolCallId),
+    
+    const message = messages[i];
+    const nextMessage = i < messages.length - 1 ? messages[i + 1] : null;
+    
+    // Only consider merging assistant messages
+    if (message.role !== 'assistant' || !nextMessage || nextMessage.role !== 'assistant') {
+      result.push(message);
+      continue;
+    }
+    
+    // Check if either message contains document-related content
+    const hasDocumentContent = documentPatterns.some(pattern => 
+      pattern.test(message.content) || (nextMessage && pattern.test(nextMessage.content))
     );
-
-    return {
-      ...message,
-      toolInvocations: sanitizedToolInvocations,
-    };
-  });
-
-  return messagesBySanitizedToolInvocations.filter(
-    (message) =>
-      message.content.length > 0 ||
-      (message.toolInvocations && message.toolInvocations.length > 0),
-  );
+    
+    // Check if either message has document-related tool invocations
+    const hasDocumentTool = 
+      (message.toolInvocations?.some(inv => ['createDocument', 'updateDocument'].includes(inv.toolName))) ||
+      (nextMessage?.toolInvocations?.some(inv => ['createDocument', 'updateDocument'].includes(inv.toolName)));
+    
+    // If this is a document-related message pair, merge them
+    if (hasDocumentContent || hasDocumentTool) {
+      // Combine content with proper spacing
+      let combinedContent = message.content || '';
+      if (nextMessage?.content && nextMessage.content.trim().length > 0) {
+        if (combinedContent.length > 0 && !combinedContent.endsWith('\n\n')) {
+          combinedContent += '\n\n';
+        }
+        combinedContent += nextMessage.content.trim();
+      }
+      
+      // Combine tool invocations
+      const combinedToolInvocations = [
+        ...(message.toolInvocations || []),
+        ...(nextMessage?.toolInvocations || [])
+      ];
+      
+      // Create merged message
+      result.push({
+        ...message,
+        content: combinedContent,
+        toolInvocations: combinedToolInvocations
+      });
+      
+      // Skip the next message since we've merged it
+      skipNext = true;
+    } else {
+      // Not a document-related message, keep as is
+      result.push(message);
+    }
+  }
+  
+  return result;
 }
 
 export function getMostRecentUserMessage(messages: Array<Message>) {

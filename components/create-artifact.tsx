@@ -51,6 +51,7 @@ interface ArtifactContent<M = any> {
 interface InitializeParameters<M = any> {
   documentId: string;
   setMetadata: Dispatch<SetStateAction<M>>;
+  setArtifact: Dispatch<SetStateAction<UIArtifact>>;
 }
 
 type ArtifactConfig<T extends string, M = any> = {

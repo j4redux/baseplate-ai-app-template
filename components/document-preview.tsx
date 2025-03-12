@@ -24,6 +24,12 @@ import equal from 'fast-deep-equal';
 import { SpreadsheetEditor } from './sheet-editor';
 import { ImageEditor } from './image-editor';
 
+// Debug utility function to help trace document lifecycle issues
+const DEBUG = false;
+function debugLog(...args: any[]) {
+  if (DEBUG) console.log('[DocumentPreview]', ...args);
+}
+
 interface DocumentPreviewProps {
   isReadonly: boolean;
   result?: any;
@@ -36,20 +42,64 @@ export function DocumentPreview({
   args,
 }: DocumentPreviewProps) {
   const { artifact, setArtifact } = useArtifact();
-
-  const { data: documents, isLoading: isDocumentsFetching } = useSWR<
-    Array<Document>
-  >(result ? `/api/document?id=${result.id}` : null, fetcher);
-
-  const previewDocument = useMemo(() => documents?.[0], [documents]);
   const hitboxRef = useRef<HTMLDivElement>(null);
 
+  // Fetch document data when we have a result ID
+  const { data: documents, isLoading: isDocumentsFetching } = useSWR<Array<Document>>(
+    result ? `/api/document?id=${result.id}` : null, 
+    fetcher
+  );
+
+  const previewDocument = useMemo(() => documents?.[0], [documents]);
+  
+  // Build a document object that works across all stages of the document lifecycle
+  // This ensures consistent access to document data regardless of streaming state
+  const document: Document | null = useMemo(() => {
+    // First priority: use fetched document if available
+    if (previewDocument) {
+      debugLog('Using previewDocument:', previewDocument);
+      return previewDocument;
+    }
+    
+    // Second priority: construct document from artifact, result, or args data
+    // This order ensures consistent document reconstruction regardless of state
+    const documentId = artifact.documentId || (result ? result.id : '');
+    const documentTitle = artifact.title || 
+                         (result ? result.title : args?.title) || 
+                         'Untitled Document';
+    const documentKind = artifact.kind || 
+                        (result ? result.kind : args?.kind) || 
+                        'text';
+    // Critical: Use a consistent source for content across streaming/post-refresh
+    // This ensures the document appears the same in both states
+    const documentContent = artifact.content || 
+                          (result ? result.content : '') || 
+                          '';
+    
+    if (documentId || result || args) {
+      const doc = {
+        title: documentTitle,
+        kind: documentKind,
+        content: documentContent,
+        id: documentId,
+        createdAt: new Date(),
+        userId: 'user',
+      };
+      debugLog('Using constructed document:', doc);
+      return doc;
+    }
+    
+    // No document data available
+    return null;
+  }, [previewDocument, artifact, result, args]);
+
+  // Update bounding box when document ID changes
   useEffect(() => {
     const boundingBox = hitboxRef.current?.getBoundingClientRect();
 
     if (artifact.documentId && boundingBox) {
-      setArtifact((artifact) => ({
-        ...artifact,
+      setArtifact((prevArtifact) => ({
+        ...prevArtifact,
         boundingBox: {
           left: boundingBox.x,
           top: boundingBox.y,
@@ -60,55 +110,127 @@ export function DocumentPreview({
     }
   }, [artifact.documentId, setArtifact]);
 
-  // When the artifact is visible, prioritize showing the document content
-  if (artifact.isVisible) {
-    // CRITICAL: If we're streaming, we want to show the document content directly
-    // This ensures real-time streaming directly into the interface
-    if (artifact.status === 'streaming') {
-      // Always create a streaming document object, even if content is empty
-      // This ensures we have a container ready to receive streaming content
-      const streamingDocument: Document = {
-        id: artifact.documentId || 'streaming-doc',
-        title: artifact.title || (result?.title || args?.title || 'Untitled Document'),
-        kind: artifact.kind,
-        content: artifact.content || '', // Use empty string if content is null/undefined
-        createdAt: new Date(),
-        userId: 'streaming-user'
-      };
-      
-      console.log('[DocumentPreview] Showing streaming document:', {
-        contentLength: artifact.content?.length || 0,
-        title: streamingDocument.title,
-        timestamp: new Date().toISOString(),
-        isStreaming: true
-      });
-      
-      // Return the streaming document view immediately
-      // This bypasses any loading states or skeleton loaders
-      return (
-        <div className="relative w-full cursor-pointer">
-          <DocumentHeader
-            title={streamingDocument.title}
-            kind={streamingDocument.kind}
-            isStreaming={true}
-          />
-          <DocumentContent document={streamingDocument} />
+  // Render full document preview interface
+  const renderFullDocumentPreview = (title: string, content: string) => {
+    return (
+      <div className="flex flex-col gap-2">
+        <div 
+          className="relative w-full cursor-pointer"
+          onClick={(event) => {
+            if (isReadonly) return;
+            
+            const rect = event.currentTarget.getBoundingClientRect();
+            const boundingBox = {
+              top: rect.top,
+              left: rect.left,
+              width: rect.width,
+              height: rect.height,
+            };
+
+            // When clicked, make the artifact visible (expanded)
+            // CRITICAL FIX: Ensure document content and metadata are preserved during expansion
+            setArtifact(current => {
+              // Get current document ID - either from artifact or from the document
+              const docId = current.documentId || document?.id || '';
+              
+              // Ensure we've loaded the document from localStorage if needed
+              let docContent = current.content;
+              let docTitle = current.title;
+              
+              // Only attempt to load from localStorage if we don't have content
+              if ((!docContent || docContent.length === 0) && docId) {
+                try {
+                  // Try to load from localStorage using the same key format as in client.tsx
+                  const storedDoc = localStorage.getItem(`document-${docId}`);
+                  if (storedDoc) {
+                    const parsedDoc = JSON.parse(storedDoc);
+                    // Use the stored content if available
+                    docContent = parsedDoc.content || docContent;
+                    // Use the stored title if available
+                    docTitle = parsedDoc.title || docTitle;
+                    console.log('[DocumentPreview] Restored content on expansion:', {
+                      docId,
+                      contentLength: docContent.length,
+                      title: docTitle
+                    });
+                  }
+                } catch (error) {
+                  console.error('[DocumentPreview] Error loading document during expansion:', error);
+                }
+              }
+              
+              return {
+                ...current,
+                isVisible: true,
+                content: docContent || content || '',  // Ensure content is preserved
+                title: docTitle || title || 'Untitled Document', // Ensure title is preserved
+                documentId: docId, // Ensure document ID is preserved
+                boundingBox,
+              };
+            });
+          }}
+        >
+          <div className="p-4 border rounded-t-2xl flex flex-row gap-2 items-center justify-between dark:bg-muted h-[57px] dark:border-zinc-700 border-b-0">
+            <div className="flex flex-row items-center gap-3">
+              <div className="text-muted-foreground">
+                <FileIcon />
+              </div>
+              <div>{title || 'Untitled Document'}</div>
+            </div>
+            <div>
+              <FullscreenIcon />
+            </div>
+          </div>
+          <div className="overflow-y-scroll border rounded-b-2xl p-4 bg-background border-t-0 dark:border-zinc-700 h-[257px]">
+            <div className="whitespace-pre-wrap overflow-hidden font-mono text-sm">
+              {content || ''}
+            </div>
+          </div>
         </div>
-      );
+      </div>
+    );
+  };
+
+  // Render simplified document result (used when artifact is expanded)
+  const renderSimpleDocumentResult = (id: string, title: string, kind: ArtifactKind) => {
+    return (
+      <DocumentToolResult
+        type="create"
+        result={{ id, title, kind }}
+        isReadonly={isReadonly}
+      />
+    );
+  };
+
+  // Determine what to show based on expanded state and document lifecycle phase
+  
+  // Debug the component state
+  debugLog('Rendering with state:', { 
+    hasResult: !!result, 
+    hasArgs: !!args, 
+    isExpanded: artifact.isVisible,
+    documentId: document?.id || 'none',
+    artifactStatus: artifact.status,
+  });
+
+  // CASE 1: Document is complete (result exists)
+  if (result) {
+    // If expanded, show simple result to avoid duplication with editor
+    if (artifact.isVisible) {
+      return renderSimpleDocumentResult(result.id, result.title, result.kind);
     }
     
-    // For non-streaming cases, use the original logic
-    if (result) {
-      return (
-        <DocumentToolResult
-          type="create"
-          result={{ id: result.id, title: result.title, kind: result.kind }}
-          isReadonly={isReadonly}
-        />
-      );
-    }
-
-    if (args) {
+    // If not expanded, always show full document preview
+    return renderFullDocumentPreview(
+      result.title || document?.title || 'Untitled Document',
+      document?.content || ''
+    );
+  }
+  
+  // CASE 2: Document is being created (args exist)
+  if (args) {
+    // If expanded, show simple creating message
+    if (artifact.isVisible) {
       return (
         <DocumentToolCall
           type="create"
@@ -117,61 +239,70 @@ export function DocumentPreview({
         />
       );
     }
+    
+    // Always show full document preview with streaming content when not expanded
+    // This provides consistency between streaming and post-refresh states
+    const title = args.title || document?.title || 'Untitled Document';
+    const content = artifact.content || document?.content || '';
+    
+    // Note: We're always using the full document rendering to maintain consistency
+    return renderFullDocumentPreview(title, content);
   }
 
-  // Important: For streaming documents, we want to show the content as it's being generated
-  // rather than showing a loading skeleton
-  const document: Document | null = previewDocument
-    ? previewDocument
-    : artifact.status === 'streaming'
-      ? {
-          title: artifact.title || 'Untitled Document',
-          kind: artifact.kind,
-          // Ensure we always have the most up-to-date content during streaming
-          // This is critical for real-time text streaming
-          content: artifact.content,
-          id: artifact.documentId,
-          createdAt: new Date(),
-          userId: 'noop',
-        }
-      : null;
-      
-  // Note: We don't force visibility changes here anymore
-  // This is to respect the memory about not opening artifact panels randomly
-  // Instead, we ensure that when the artifact IS visible, it shows streaming content
-
-  // Only show loading skeleton if we're fetching documents and not streaming
-  if (isDocumentsFetching && artifact.status !== 'streaming') {
+  // Only show loading skeleton if we're actively fetching documents but not streaming
+  // This ensures we don't unnecessarily show loading states during refresh
+  if (isDocumentsFetching && artifact.status !== 'streaming' && !document && !artifact.content) {
     return <LoadingSkeleton artifactKind={result?.kind ?? args?.kind ?? artifact.kind} />;
   }
+  
+  // For refreshed pages where document data might be temporarily unavailable,
+  // we use artifact data if available to maintain consistent display
+  if (!document && artifact.status !== 'streaming' && !artifact.content) {
+    // If we have result or args data, we can still render something meaningful
+    if (result || args) {
+      const title = result?.title || args?.title || 'Untitled Document';
+      const content = result?.content || '';
+      // Use consistent document preview rendering with available data
+      return renderFullDocumentPreview(title, content);
+    }
+    return <LoadingSkeleton artifactKind={artifact.kind} />;
+  }
 
-  // If we don't have a document and we're not streaming, show loading skeleton
-  if (!document) return <LoadingSkeleton artifactKind={artifact.kind} />;
-
-  // Add debug logging to help diagnose the issue
-  console.log(`[DocumentPreview] Rendering document:`, {
-    documentId: document.id,
-    title: document.title,
-    contentLength: document.content?.length || 0,
-    isStreaming: artifact.status === 'streaming',
-    artifactContent: artifact.content?.length || 0
-  });
-
-  return (
-    <div className="relative w-full cursor-pointer">
-      <HitboxLayer
-        hitboxRef={hitboxRef}
-        result={result}
-        setArtifact={setArtifact}
-      />
-      <DocumentHeader
-        title={document.title}
-        kind={document.kind}
-        isStreaming={artifact.status === 'streaming'}
-      />
-      <DocumentContent document={document} />
-    </div>
-  );
+  // CASE 3: Default case - normal document viewing
+  if (document) {
+    // When artifact is not expanded, always show the full document preview interface
+    // This ensures consistent behavior before/after refresh
+    if (!artifact.isVisible) {
+      return renderFullDocumentPreview(document.title, document.content || '');
+    }
+    
+    // When artifact is expanded, show the document content in the expanded view
+    // This is typically rendered elsewhere in the UI (in the artifact editor)
+    debugLog('Rendering expanded document view:', {
+      documentId: document.id,
+      title: document.title,
+      contentLength: document.content?.length || 0,
+      isStreaming: artifact.status === 'streaming',
+      isArtifactVisible: artifact.isVisible
+    });
+    
+    // For expanded view, we use a simpler rendering to avoid duplication
+    // since the full content is shown in the artifact editor
+    return (
+      <div className="relative w-full cursor-pointer">
+        <div ref={hitboxRef}></div>
+        <DocumentHeader
+          title={document.title}
+          kind={document.kind}
+          isStreaming={artifact.status === 'streaming'}
+        />
+        <DocumentContent document={document} />
+      </div>
+    );
+  }
+  
+  // Fallback for any other cases
+  return <LoadingSkeleton artifactKind={artifact.kind} />;
 }
 
 const LoadingSkeleton = ({ artifactKind }: { artifactKind: ArtifactKind }) => (
@@ -306,13 +437,14 @@ const DocumentContent = ({ document }: { document: Document }) => {
     },
   );
 
-  // CRITICAL: When streaming, always prioritize the artifact content which is updated in real-time
-  // This ensures we show the latest content as it streams in directly from the server
-  // The artifact.content is updated immediately by the data-stream-handler for each text-delta event
+  // Document preview content behavior:
+  // 1. When artifact is NOT expanded, always show document content regardless of streaming status
+  // 2. When artifact IS expanded, don't show duplicate content in the preview
+  // This ensures the document preview maintains consistency after streaming completes
   const contentToShow = 
-    artifact.status === 'streaming' ? 
-      artifact.content || '' : 
-      document.content ?? '';
+    !artifact.isVisible ? 
+      artifact.content || document.content || '' : 
+      '';
       
   // Use useLayoutEffect to ensure the DOM is updated synchronously after React renders
   // This helps prevent flickering during streaming updates

@@ -207,6 +207,7 @@ const PurePreviewMessage = ({
                           <DocumentPreview
                             isReadonly={isReadonly}
                             result={result}
+                            args={args} // Pass args for consistent document rendering
                           />
                         ) : toolName === 'updateDocument' ? (
                           <DocumentToolResult
@@ -236,7 +237,9 @@ const PurePreviewMessage = ({
                       {toolName === 'getWeather' ? (
                         <Weather />
                       ) : toolName === 'createDocument' ? (
-                        <DocumentPreview isReadonly={isReadonly} args={args} />
+                        <DocumentPreview
+                          isReadonly={isReadonly}
+                          args={args} />
                       ) : toolName === 'updateDocument' ? (
                         <DocumentToolCall
                           type="update"

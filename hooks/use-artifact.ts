@@ -12,6 +12,12 @@ interface ArtifactMetadata {
     readonly content: string;
     readonly timestamp: number;
   }>;
+  // Additional metadata to maintain message consistency
+  readonly originalMessageStructure?: boolean;
+  readonly streamingMessageId?: string;
+  readonly documentFinished?: boolean;
+  readonly finalContent?: string;
+  readonly messageStructureComplete?: boolean;
 }
 
 export const initialArtifactData: UIArtifact = {

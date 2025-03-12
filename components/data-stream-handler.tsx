@@ -165,6 +165,16 @@ export function DataStreamHandler({ id }: DataStreamHandlerProps) {
               }
             }
             
+            // Store original message content for consistent message structure
+            // This is crucial for maintaining UI consistency during streaming and after refresh
+            if (typeof setMetadata === 'function') {
+              setMetadata((prev) => ({
+                ...prev,
+                originalMessageStructure: true,
+                streamingMessageId: prev.streamingMessageId || `streaming-${Date.now()}`,
+              }));
+            }
+            
             const newContent = existingContent + contentToAdd;
             
             // Enhanced logging for text-delta events with duplication prevention
@@ -186,9 +196,32 @@ export function DataStreamHandler({ id }: DataStreamHandlerProps) {
               isVisible,
             };
           case 'finish':
+            // Important: When document streaming finishes, we need to ensure
+            // all document state is properly preserved for consistent display
+            // after page refreshes.
+            
+            // Store the final document state in metadata to ensure consistent message processing
+            if (typeof setMetadata === 'function') {
+              setMetadata((prev) => ({
+                ...prev,
+                documentFinished: true,
+                finalContent: baseArtifact.content,
+                documentId: baseArtifact.documentId,
+                title: baseArtifact.title,
+                kind: baseArtifact.kind,
+                messageStructureComplete: true,
+              }));
+            }
+            
             return {
               ...baseArtifact,
               status: 'idle',
+              // Preserve document content explicitly to ensure it's available after refresh
+              content: baseArtifact.content,
+              // Preserve all document metadata
+              documentId: baseArtifact.documentId,
+              title: baseArtifact.title,
+              kind: baseArtifact.kind,
               // Don't change visibility state - maintain user control
               isVisible,
             };
