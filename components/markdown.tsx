@@ -47,14 +47,14 @@ const documentComponents: Components = {
   },
   ol({ children, ...props }) {
     return (
-      <ol className="list-decimal list-outside ml-4 my-2" {...props}>
+      <ol className="list-decimal list-outside ml-6 pl-2 my-2" {...props}>
         {children}
       </ol>
     );
   },
   li({ children, ...props }) {
     return (
-      <li className="py-1" {...props}>
+      <li className="py-1 pl-1" {...props}>
         {children}
       </li>
     );
