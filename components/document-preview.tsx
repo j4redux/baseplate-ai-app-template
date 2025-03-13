@@ -35,18 +35,12 @@ interface DocumentPreviewProps {
   isReadonly: boolean;
   result?: any;
   args?: any;
-  toolCallId?: string;
-  isLatestOperation?: boolean;
-  documentOperations?: string[];
 }
 
 export function DocumentPreview({
   isReadonly,
   result,
   args,
-  toolCallId,
-  isLatestOperation = true,
-  documentOperations = [],
 }: DocumentPreviewProps) {
   const { artifact, setArtifact } = useArtifact();
   const hitboxRef = useRef<HTMLDivElement>(null);
@@ -89,7 +83,7 @@ export function DocumentPreview({
         kind: documentKind,
         content: documentContent,
         id: documentId,
-        createdAt: new Date(),
+        createdAt: new Date(Date.now()), // Use stable timestamp for SSR
         userId: 'user',
       };
       debugLog('Using constructed document:', doc);
@@ -100,15 +94,10 @@ export function DocumentPreview({
     return null;
   }, [previewDocument, artifact, result, args]);
 
-  // Check if this preview should be collapsed due to newer operations
-  const hasNewerOperations = useMemo(() => {
-    if (!toolCallId || documentOperations.length <= 1) return false;
-    const currentIndex = documentOperations.indexOf(toolCallId);
-    return currentIndex >= 0 && currentIndex < documentOperations.length - 1;
-  }, [toolCallId, documentOperations]);
-
-  // Update bounding box when document ID changes
-  useEffect(() => {
+  // Update bounding box when document ID changes - client-side only
+  const useIsomorphicEffect = typeof window !== 'undefined' ? useEffect : () => {};
+  
+  useIsomorphicEffect(() => {
     const boundingBox = hitboxRef.current?.getBoundingClientRect();
 
     if (artifact.documentId && boundingBox) {
@@ -123,27 +112,15 @@ export function DocumentPreview({
       }));
     }
   }, [artifact.documentId, setArtifact]);
-  
-  // Handle document visibility based on subsequent updates
-  useEffect(() => {
-    // Only apply to the currently active document
-    if (artifact.documentId !== document?.id) return;
-    
-    // If this is not the latest operation, ensure it's collapsed
-    if (hasNewerOperations && artifact.isVisible) {
-      debugLog('Collapsing document preview due to newer operations', { toolCallId, documentOperations });
-      setArtifact((prevArtifact) => ({
-        ...prevArtifact,
-        isVisible: false
-      }));
-    }
-  }, [hasNewerOperations, artifact.documentId, artifact.isVisible, document?.id, setArtifact, toolCallId, documentOperations]);
 
   // Reference to the document content container for auto-scrolling
   const contentContainerRef = useRef<HTMLDivElement | null>(null);
   
   // Effect to handle auto-scrolling during streaming
-  useEffect(() => {
+  // Use useLayoutEffect for client-side only code
+  const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect;
+  
+  useIsomorphicLayoutEffect(() => {
     // Only auto-scroll during streaming
     if (artifact.status === 'streaming' && contentContainerRef.current) {
       // Use double requestAnimationFrame to ensure smooth scrolling to new content
@@ -162,7 +139,7 @@ export function DocumentPreview({
   // Render full document preview interface
   const renderFullDocumentPreview = (title: string, content: string) => {
     return (
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-2 w-full max-w-[calc(100%-2.5rem)] overflow-hidden">
         <div 
           className="relative w-full cursor-pointer"
           onClick={(event) => {
@@ -187,7 +164,8 @@ export function DocumentPreview({
               let docTitle = current.title;
               
               // Only attempt to load from localStorage if we don't have content
-              if ((!docContent || docContent.length === 0) && docId) {
+              // and we're in the browser environment (not during SSR)
+              if (typeof window !== 'undefined' && (!docContent || docContent.length === 0) && docId) {
                 try {
                   // Try to load from localStorage using the same key format as in client.tsx
                   const storedDoc = localStorage.getItem(`document-${docId}`);
@@ -219,12 +197,12 @@ export function DocumentPreview({
             });
           }}
         >
-          <div className="p-4 border rounded-t-2xl flex flex-row gap-2 items-center justify-between bg-zinc-100 dark:bg-muted h-[57px] dark:border-zinc-700 border-b-0">
-            <div className="flex flex-row items-center gap-3">
-              <div className="text-muted-foreground">
+          <div className="p-4 border rounded-t-2xl flex flex-row gap-2 items-center justify-between bg-zinc-100 dark:bg-muted h-[57px] dark:border-zinc-700 border-b-0 overflow-hidden">
+            <div className="flex flex-row items-center gap-3 min-w-0 flex-1 overflow-hidden w-full">
+              <div className="text-muted-foreground flex-shrink-0">
                 <FileIcon />
               </div>
-              <div>{title || 'Untitled Document'}</div>
+              <div className="overflow-hidden text-ellipsis whitespace-nowrap max-w-[calc(100%-40px)] w-full">{title || 'Untitled Document'}</div>
             </div>
             <div>
               <FullscreenIcon />
@@ -232,9 +210,9 @@ export function DocumentPreview({
           </div>
           <div 
             ref={contentContainerRef}
-            className="overflow-y-scroll border rounded-b-2xl px-8 py-4 bg-background border-t-0 dark:border-zinc-700 h-[257px]"
+            className="overflow-y-scroll border rounded-b-2xl px-8 py-4 bg-background border-t-0 dark:border-zinc-700 h-[257px] w-full"
           >
-            <div className="prose prose-sm dark:prose-invert max-w-none overflow-hidden">
+            <div className="prose prose-xs sm:prose-sm dark:prose-invert max-w-none w-full break-words">
               <Markdown isDocument={true}>{content || ''}</Markdown>
             </div>
           </div>
@@ -267,12 +245,6 @@ export function DocumentPreview({
 
   // CASE 1: Document is complete (result exists)
   if (result) {
-    // If this document has newer operations, always show the static variant
-    if (hasNewerOperations) {
-      debugLog('Using static variant due to newer operations', { toolCallId, documentOperations });
-      return renderSimpleDocumentResult(result.id, result.title, result.kind);
-    }
-    
     // If expanded, show simple result to avoid duplication with editor
     if (artifact.isVisible) {
       return renderSimpleDocumentResult(result.id, result.title, result.kind);
@@ -287,18 +259,6 @@ export function DocumentPreview({
   
   // CASE 2: Document is being created (args exist)
   if (args) {
-    // If this document has newer operations, always show the static variant
-    if (hasNewerOperations) {
-      debugLog('Using static variant during creation due to newer operations', { toolCallId });
-      return (
-        <DocumentToolCall
-          type="create"
-          args={{ title: args.title }}
-          isReadonly={isReadonly}
-        />
-      );
-    }
-    
     // If expanded, show simple creating message
     if (artifact.isVisible) {
       return (
@@ -340,12 +300,6 @@ export function DocumentPreview({
 
   // CASE 3: Default case - normal document viewing
   if (document) {
-    // If this document has newer operations, always show a static variant
-    if (hasNewerOperations) {
-      debugLog('Using static variant for document view due to newer operations', { toolCallId });
-      return renderSimpleDocumentResult(document.id, document.title, document.kind);
-    }
-    
     // When artifact is not expanded, always show the full document preview interface
     // This ensures consistent behavior before/after refresh
     if (!artifact.isVisible) {
@@ -470,8 +424,8 @@ const PureDocumentHeader = ({
   kind: ArtifactKind;
   isStreaming: boolean;
 }) => (
-  <div className="p-4 border rounded-t-2xl flex flex-row gap-2 items-start sm:items-center justify-between dark:bg-muted border-b-0 dark:border-zinc-700">
-    <div className="flex flex-row items-start sm:items-center gap-3">
+  <div className="p-4 sm:p-5 border rounded-t-2xl flex flex-row gap-2 items-start sm:items-center justify-between dark:bg-muted border-b-0 dark:border-zinc-700">
+    <div className="flex flex-row items-start sm:items-center gap-2 sm:gap-3">
       <div className="text-muted-foreground">
         {isStreaming ? (
           <div className="animate-spin">

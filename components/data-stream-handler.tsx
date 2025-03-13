@@ -6,6 +6,10 @@ import { artifactDefinitions, ArtifactKind } from './artifact';
 import { Suggestion } from '@/lib/db/schema';
 import { initialArtifactData, useArtifact } from '@/hooks/use-artifact';
 
+// Environment flag to enable parallel streaming
+// When true, message text will continue streaming while documents are being created
+const ENABLE_PARALLEL_STREAMING = true;
+
 export type DataStreamDelta = {
   type:
     | 'text-delta'
@@ -34,6 +38,10 @@ export function DataStreamHandler({ id }: DataStreamHandlerProps) {
   // Buffer for text deltas to batch updates - allows smoother rendering
   const textDeltaBuffer = useRef<string>('');
   const bufferTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Track document creation state to handle parallel streaming
+  const documentCreationActive = useRef<boolean>(false);
+  const messageStreamingActive = useRef<boolean>(false);
   
   // Initialize metadata when artifact kind changes or component mounts
   useEffect(() => {
@@ -80,34 +88,54 @@ export function DataStreamHandler({ id }: DataStreamHandlerProps) {
         content: textDeltaBuffer.current
       };
       
+      // Track whether this is document content or message text
+      const isDocumentContent = documentCreationActive.current && 
+                              artifact.kind !== 'text' && 
+                              artifact.status === 'streaming';
+      
       // For text artifacts, let the artifact-specific handler handle the content update
       // This prevents duplication since both handlers would otherwise update the content
       if (artifactDefinition?.onStreamPart) {
-        artifactDefinition.onStreamPart({
-          streamPart: bufferedDelta,
-          setArtifact,
-          setMetadata,
-        });
+        // If we're in parallel streaming mode, both message text and document content 
+        // can update simultaneously
+        if (ENABLE_PARALLEL_STREAMING || !isDocumentContent) {
+          artifactDefinition.onStreamPart({
+            streamPart: bufferedDelta,
+            setArtifact,
+            setMetadata,
+          });
+        }
         
-        // For text artifacts, we don't need to update the content again
-        // The artifact handler already did that
-        if (artifact.kind === 'text') {
-          // Just update the metadata for consistent message structure
+        // For text artifacts or when we're in parallel streaming mode, 
+        // we need specialized processing
+        if (artifact.kind === 'text' || ENABLE_PARALLEL_STREAMING) {
+          // Update metadata for consistent message structure
           if (typeof setMetadata === 'function') {
             setMetadata((prev) => ({
               ...prev,
               originalMessageStructure: true,
               streamingMessageId: prev.streamingMessageId || `streaming-${Date.now()}`,
+              // Flag that message streaming is active
+              messageStreamingActive: true
             }));
           }
           
-          // Log the delegation to the text artifact handler
-          console.log('[DataStreamHandler] Text content update delegated to text artifact handler');
-          
-          // Clear the buffer and return early
-          textDeltaBuffer.current = '';
-          bufferTimeoutRef.current = null;
-          return;
+          // In parallel streaming mode, continue with both document and message updates
+          if (ENABLE_PARALLEL_STREAMING) {
+            console.log('[DataStreamHandler] Parallel streaming enabled, continuing with updates');
+            // Don't return early - we'll continue to process message text alongside document content
+          } else {
+            // In legacy mode, handle text artifacts as before
+            if (artifact.kind === 'text') {
+              // Log the delegation to the text artifact handler
+              console.log('[DataStreamHandler] Text content update delegated to text artifact handler');
+              
+              // Clear the buffer and return early
+              textDeltaBuffer.current = '';
+              bufferTimeoutRef.current = null;
+              return;
+            }
+          }
         }
       }
       
@@ -257,6 +285,9 @@ export function DataStreamHandler({ id }: DataStreamHandlerProps) {
 
         switch (delta.type) {
           case 'id':
+            // Mark document creation as active when an ID is assigned
+            documentCreationActive.current = true;
+            console.log('[DataStreamHandler] Document creation active with ID:', delta.content);
             return {
               ...baseArtifact,
               documentId: delta.content as string,
@@ -301,11 +332,20 @@ export function DataStreamHandler({ id }: DataStreamHandlerProps) {
               flushTextBuffer();
             }
             
+            // Reset document creation state
+            documentCreationActive.current = false;
+            console.log('[DataStreamHandler] Document creation completed');
+            
             // Store the final document state in metadata to ensure consistent message processing
             if (typeof setMetadata === 'function') {
               setMetadata((prev) => {
                 // Ensure we have a valid metadata object
                 const metadata = prev || {};
+                
+                // In parallel streaming mode, ensure we preserve message text streaming state
+                if (ENABLE_PARALLEL_STREAMING) {
+                  console.log('[DataStreamHandler] Preserving message streaming state with parallel streaming');
+                }
                 
                 // For text artifacts, ensure we preserve the complete message structure
                 // This is critical for consistent display after page reloads
@@ -331,6 +371,8 @@ export function DataStreamHandler({ id }: DataStreamHandlerProps) {
                   messageStructureComplete: true,
                   // Preserve the original message structure explicitly
                   originalMessageStructure: true,
+                  // Mark message streaming as active if we're in parallel mode
+                  messageStreamingActive: ENABLE_PARALLEL_STREAMING ? true : metadata.messageStreamingActive
                 };
               });
             }

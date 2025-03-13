@@ -18,6 +18,7 @@ interface ArtifactMetadata {
   readonly documentFinished?: boolean;
   readonly finalContent?: string;
   readonly messageStructureComplete?: boolean;
+  readonly messageStreamingActive?: boolean; // Track if message text is actively streaming
 }
 
 export const initialArtifactData: UIArtifact = {

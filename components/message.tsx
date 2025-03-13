@@ -1,8 +1,25 @@
 'use client';
 
 import type { ChatRequestOptions, Message } from 'ai';
-
+import { useArtifact } from '@/hooks/use-artifact';
 import { processText, formatTemperatures } from '@/lib/utils';
+import cx from 'classnames';
+import { AnimatePresence, motion } from 'framer-motion';
+import { memo, useState } from 'react';
+import type { Vote } from '@/lib/db/schema';
+import { DocumentToolCall, DocumentToolResult } from './document';
+import { PencilEditIcon, SparklesIcon, LoaderIcon } from './icons';
+import { Markdown } from './markdown';
+import { MessageActions } from './message-actions';
+import { PreviewAttachment } from './preview-attachment';
+import { Weather } from './weather';
+import equal from 'fast-deep-equal';
+import { cn } from '@/lib/utils';
+import { Button } from './ui/button';
+import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
+import { MessageEditor } from './message-editor';
+import { DocumentPreview } from './document-preview';
+import { MessageReasoning } from './message-reasoning';
 
 interface TextContent {
   readonly type: 'text';
@@ -47,23 +64,7 @@ function formatMessageContent(content: Message['content']): string {
   // Join parts with proper spacing
   return processRegularText(textParts.join('\n\n'));
 }
-import cx from 'classnames';
-import { AnimatePresence, motion } from 'framer-motion';
-import { memo, useState } from 'react';
-import type { Vote } from '@/lib/db/schema';
-import { DocumentToolCall, DocumentToolResult } from './document';
-import { PencilEditIcon, SparklesIcon } from './icons';
-import { Markdown } from './markdown';
-import { MessageActions } from './message-actions';
-import { PreviewAttachment } from './preview-attachment';
-import { Weather } from './weather';
-import equal from 'fast-deep-equal';
-import { cn } from '@/lib/utils';
-import { Button } from './ui/button';
-import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
-import { MessageEditor } from './message-editor';
-import { DocumentPreview } from './document-preview';
-import { MessageReasoning } from './message-reasoning';
+
 
 const PurePreviewMessage = ({
   chatId,
@@ -89,6 +90,12 @@ const PurePreviewMessage = ({
   index: number;
 }) => {
   const [mode, setMode] = useState<'view' | 'edit'>('view');
+  // Get artifact metadata to check if document is being created while message streams
+  const { metadata } = useArtifact();
+  
+  // Determine if message should continue streaming while document is generating
+  const enableParallelStreaming = true; // Same flag as in data-stream-handler
+  const isParallelStreaming = enableParallelStreaming && metadata.messageStreamingActive;
 
   return (
     <AnimatePresence>
@@ -103,8 +110,10 @@ const PurePreviewMessage = ({
           className={cn(
             'flex gap-4 w-full group-data-[role=user]/message:ml-auto group-data-[role=user]/message:max-w-2xl',
             {
+              'justify-start': message.role === 'assistant' || mode === 'edit',
+              'justify-end': message.role === 'user' && mode !== 'edit',
               'w-full': mode === 'edit',
-              'group-data-[role=user]/message:w-fit': mode !== 'edit',
+              'group-data-[role=user]/message:w-fit': message.role === 'user' && mode !== 'edit',
             },
           )}
         >
@@ -116,7 +125,7 @@ const PurePreviewMessage = ({
             </div>
           )}
 
-          <div className="flex flex-col gap-4 w-full">
+          <div className="flex flex-col gap-4 w-full max-w-2xl">
             {message.experimental_attachments && (
               <div
                 data-testid={`message-attachments-${index}`}
@@ -139,14 +148,14 @@ const PurePreviewMessage = ({
             )}
 
             {(message.content || message.reasoning) && mode === 'view' && (
-              <div className="flex flex-row gap-2 items-start">
+              <div className="flex flex-row gap-2 items-start w-full overflow-hidden">
                 {message.role === 'user' && !isReadonly && (
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
                         data-testid={`edit-${message.role}-${index}`}
                         variant="ghost"
-                        className="px-2 h-fit rounded-full text-muted-foreground opacity-0 group-hover/message:opacity-100"
+                        className="px-2 h-fit rounded-full text-muted-foreground opacity-0 group-hover/message:opacity-100 flex-shrink-0"
                         onClick={() => {
                           setMode('edit');
                         }}
@@ -160,18 +169,29 @@ const PurePreviewMessage = ({
 
                 <div
                   className={cn('flex flex-col gap-4 rounded-2xl shadow-sm', {
-                    'bg-primary text-primary-foreground px-5 py-4':
+                    'bg-primary text-primary-foreground px-3 sm:px-5 py-4':
                       message.role === 'user',
-                    'bg-secondary/50 border border-primary/20 px-5 py-4': 
+                    'bg-secondary/50 border border-primary/20 px-3 sm:px-5 py-4 max-w-2xl': 
                       message.role === 'assistant',
                   })}
                 >
-                  <div className="font-lexend">
+                  <div className="font-lexend break-words overflow-hidden">
                     <Markdown
                       isDocument={false} // Let markdown render naturally in messages
+                      key={`markdown-${isParallelStreaming ? 'streaming' : 'static'}-${index}`} // Force re-render when streaming state changes
                     >
                       {formatMessageContent(message.content)}
                     </Markdown>
+                    
+                    {/* Add loading indicator if parallel streaming is active */}
+                    {isLoading && isParallelStreaming && (
+                      <div className="mt-1 text-muted-foreground flex items-center gap-2">
+                        <div className="animate-spin size-3">
+                          <LoaderIcon size={12} />
+                        </div>
+                        <span className="text-xs">Document being created...</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -193,101 +213,72 @@ const PurePreviewMessage = ({
 
             {message.toolInvocations && message.toolInvocations.length > 0 && (
               <div className="flex flex-col gap-4">
-                {(() => {
-                  // First identify all document-related operations in this message
-                  const documentOperations = message.toolInvocations
-                    .filter(invocation => [
-                      'createDocument', 
-                      'updateDocument'
-                    ].includes(invocation.toolName))
-                    .map(invocation => invocation.toolCallId);
-                  
-                  // Then render each tool invocation with document operation context
-                  return message.toolInvocations.map((toolInvocation) => {
-                    const { toolName, toolCallId, state, args } = toolInvocation;
-                    const isDocumentOperation = documentOperations.includes(toolCallId);
-                    const isLatestDocOperation = isDocumentOperation && 
-                      documentOperations.indexOf(toolCallId) === documentOperations.length - 1;
+                {message.toolInvocations.map((toolInvocation) => {
+                  const { toolName, toolCallId, state, args } = toolInvocation;
 
-                    if (state === 'result') {
-                      const { result } = toolInvocation;
+                  if (state === 'result') {
+                    const { result } = toolInvocation;
 
-                      return (
-                        <div key={toolCallId}>
-                          {toolName === 'getWeather' ? (
-                            <Weather weatherAtLocation={result} />
-                          ) : toolName === 'createDocument' ? (
-                            <DocumentPreview
-                              isReadonly={isReadonly}
-                              result={result}
-                              args={args}
-                              toolCallId={toolCallId}
-                              isLatestOperation={isLatestDocOperation}
-                              documentOperations={documentOperations}
-                            />
-                          ) : toolName === 'updateDocument' ? (
-                            isLatestDocOperation ? (
-                              <DocumentPreview
-                                isReadonly={isReadonly}
-                                result={result}
-                                args={args}
-                                toolCallId={toolCallId}
-                                isLatestOperation={isLatestDocOperation}
-                                documentOperations={documentOperations}
-                              />
-                            ) : (
-                              <DocumentToolResult
-                                type="update"
-                                result={result}
-                                isReadonly={isReadonly}
-                              />
-                            )
-                          ) : toolName === 'requestSuggestions' ? (
-                            <DocumentToolResult
-                              type="request-suggestions"
-                              result={result}
-                              isReadonly={isReadonly}
-                            />
-                          ) : (
-                            <pre>{JSON.stringify(result, null, 2)}</pre>
-                          )}
-                        </div>
-                      );
-                    }
                     return (
-                      <div
-                        key={toolCallId}
-                        className={cx({
-                          skeleton: ['getWeather'].includes(toolName),
-                        })}
-                      >
+                      <div key={toolCallId}>
                         {toolName === 'getWeather' ? (
-                          <Weather />
+                          <Weather weatherAtLocation={result} />
                         ) : toolName === 'createDocument' ? (
                           <DocumentPreview
                             isReadonly={isReadonly}
-                            args={args}
-                            toolCallId={toolCallId}
-                            isLatestOperation={isLatestDocOperation}
-                            documentOperations={documentOperations}
+                            result={result}
+                            args={args} // Pass args for consistent document rendering
+                            key={`document-preview-${result ? 'complete' : 'streaming'}-${index}`} // Force re-render when result changes
                           />
                         ) : toolName === 'updateDocument' ? (
-                          <DocumentToolCall
+                          <DocumentToolResult
                             type="update"
-                            args={args}
+                            result={result}
                             isReadonly={isReadonly}
                           />
                         ) : toolName === 'requestSuggestions' ? (
-                          <DocumentToolCall
+                          <DocumentToolResult
                             type="request-suggestions"
-                            args={args}
+                            result={result}
                             isReadonly={isReadonly}
                           />
-                        ) : null}
+                        ) : (
+                          <pre>{JSON.stringify(result, null, 2)}</pre>
+                        )}
                       </div>
                     );
-                  });
-                })()} 
+                  }
+                  return (
+                    <div
+                      key={toolCallId}
+                      className={cx({
+                        skeleton: ['getWeather'].includes(toolName),
+                      })}
+                    >
+                      {toolName === 'getWeather' ? (
+                        <Weather />
+                      ) : toolName === 'createDocument' ? (
+                        <DocumentPreview
+                          isReadonly={isReadonly}
+                          args={args}
+                          key={`document-preview-streaming-${index}`} // Force re-render for streaming state
+                        />
+                      ) : toolName === 'updateDocument' ? (
+                        <DocumentToolCall
+                          type="update"
+                          args={args}
+                          isReadonly={isReadonly}
+                        />
+                      ) : toolName === 'requestSuggestions' ? (
+                        <DocumentToolCall
+                          type="request-suggestions"
+                          args={args}
+                          isReadonly={isReadonly}
+                        />
+                      ) : null}
+                    </div>
+                  );
+                })}
               </div>
             )}
 
@@ -310,18 +301,29 @@ const PurePreviewMessage = ({
 export const PreviewMessage = memo(
   PurePreviewMessage,
   (prevProps, nextProps) => {
+    // Always re-render if loading state changes
     if (prevProps.isLoading !== nextProps.isLoading) return false;
-    if (prevProps.message.reasoning !== nextProps.message.reasoning)
-      return false;
+    // Always re-render if reasoning changes
+    if (prevProps.message.reasoning !== nextProps.message.reasoning) return false;
+    // Always re-render if content changes
     if (prevProps.message.content !== nextProps.message.content) return false;
+    // Always re-render if tool invocations change
     if (
       !equal(
         prevProps.message.toolInvocations,
         nextProps.message.toolInvocations,
       )
-    )
-      return false;
+    ) return false;
+    // Always re-render if votes change
     if (!equal(prevProps.vote, nextProps.vote)) return false;
+    
+    // Force re-render every 500ms during active streaming to ensure content updates
+    if (prevProps.isLoading && nextProps.isLoading) {
+      // Get the current timestamp to ensure we re-render periodically during streaming
+      const timestamp = Date.now();
+      // Use a stable interval (500ms) to avoid too frequent re-renders
+      if (timestamp % 500 < 100) return false; // Re-render approximately every 500ms
+    }
 
     return true;
   },

@@ -24,7 +24,7 @@ export const viewport = {
 
 const LIGHT_THEME_COLOR = 'hsl(35 30% 99%)';
 const DARK_THEME_COLOR = 'hsl(225 25% 12%)';
-const THEME_COLOR_SCRIPT = `\
+const THEME_COLOR_SCRIPT = `
 (function() {
   var html = document.documentElement;
   var meta = document.querySelector('meta[name="theme-color"]');
