@@ -17,22 +17,26 @@
 ## Features
 
 - **Modern Web Framework**
+
   - [Next.js](https://nextjs.org) App Router for optimized routing and performance
   - React Server Components (RSCs) for improved rendering efficiency
   - Server Actions for secure server-side operations
 
 - **AI Integration Layer**
+
   - [AI SDK](https://sdk.vercel.ai/docs) providing unified API for LLM interactions
   - Streaming response handling with real-time UI updates
   - Multi-model support: OpenAI, Anthropic (Claude), Fireworks, and more
   - Prompt management system for consistent AI interactions
 
 - **Document System Architecture**
+
   - Complete document lifecycle management (creation, streaming, completion)
   - Specialized editors for different content types (text, code, spreadsheets)
   - Expandable document interface with preview and full editing modes
 
 - **Polished UI Framework**
+
   - [shadcn/ui](https://ui.shadcn.com) with [Tailwind CSS](https://tailwindcss.com) for responsive design
   - Accessible component primitives from [Radix UI](https://radix-ui.com)
   - Dark/light mode support with theme customization
@@ -47,21 +51,25 @@
 Baseplate provides a flexible foundation for building various AI-powered applications:
 
 - **Conversational Interfaces**
+
   - Multi-turn dialogue management with context preservation
   - Message streaming for real-time responses
   - Support for different conversation styles and personalities
 
 - **Document Processing**
+
   - AI-generated content with specialized rendering
   - Real-time document creation and editing
   - Support for multiple document formats (text, code, data)
 
 - **Advanced Model Capabilities**
+
   - **OpenAI Integration**
+
     - GPT-4o and other OpenAI models with vision capabilities
     - Function calling for tool integration
     - JSON mode for structured outputs
-  
+
   - **Claude Integration**
     - Support for latest Claude models (3.5 Sonnet, 3.7 Sonnet)
     - Extended thinking mode for complex reasoning tasks (Claude 3.7 Sonnet)
@@ -96,7 +104,7 @@ Baseplate provides a flexible foundation for building various AI-powered applica
 
 ```bash
 # Clone repository
-git clone https://github.com/yourusername/your-new-project.git
+git clone https://github.com/j4redux/baseplate-next.git
 cd your-new-project
 
 # Install dependencies
@@ -176,19 +184,19 @@ baseplate/
 
 ```typescript
 // app/api/chat/route.ts
-import { anthropic } from '@ai-sdk/anthropic';
-import { streamText } from 'ai';
-import { NextResponse } from 'next/server';
+import { anthropic } from "@ai-sdk/anthropic";
+import { streamText } from "ai";
+import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
   const { prompt } = await req.json();
-  
+
   const stream = await streamText({
-    model: anthropic('claude-3-5-sonnet-20240620'),
+    model: anthropic("claude-3-5-sonnet-20240620"),
     prompt,
     maxTokens: 1000,
   });
-  
+
   return new NextResponse(stream);
 }
 ```
@@ -197,39 +205,40 @@ export async function POST(req: Request) {
 
 ```typescript
 // Using Claude's extended thinking capabilities
-import { anthropic } from '@ai-sdk/anthropic';
-import { generateText } from 'ai';
+import { anthropic } from "@ai-sdk/anthropic";
+import { generateText } from "ai";
 
 async function generateWithExtendedThinking() {
   const response = await generateText({
-    model: anthropic('claude-3-7-sonnet-20250219'),
-    prompt: 'Analyze the implications of quantum computing on modern cryptography.',
+    model: anthropic("claude-3-7-sonnet-20250219"),
+    prompt:
+      "Analyze the implications of quantum computing on modern cryptography.",
     maxTokens: 4000,
     anthropicOptions: {
       thinking: {
-        type: 'enabled',
-        budgetTokens: 8000 // Allocate tokens for thinking process
-      }
-    }
+        type: "enabled",
+        budgetTokens: 8000, // Allocate tokens for thinking process
+      },
+    },
   });
-  
+
   return response;
 }
 
 export async function generateWithThinking(prompt: string) {
   const { text, reasoning } = await generateText({
-    model: anthropic('claude-3-7-sonnet-20250219'),
+    model: anthropic("claude-3-7-sonnet-20250219"),
     prompt,
     providerOptions: {
       anthropic: {
-        thinking: { type: 'enabled', budgetTokens: 12000 },
+        thinking: { type: "enabled", budgetTokens: 12000 },
       },
     },
   });
-  
-  return { 
+
+  return {
     result: text,
-    reasoning // Access Claude's reasoning process
+    reasoning, // Access Claude's reasoning process
   };
 }
 ```
@@ -238,28 +247,28 @@ export async function generateWithThinking(prompt: string) {
 
 ```typescript
 // Handling image inputs with Claude
-import { anthropic } from '@ai-sdk/anthropic';
-import { generateText } from 'ai';
-import fs from 'fs';
+import { anthropic } from "@ai-sdk/anthropic";
+import { generateText } from "ai";
+import fs from "fs";
 
 export async function analyzeImage(imageBuffer: Buffer, question: string) {
   const result = await generateText({
-    model: anthropic('claude-3-5-sonnet-20240620'),
+    model: anthropic("claude-3-5-sonnet-20240620"),
     messages: [
       {
-        role: 'user',
+        role: "user",
         content: [
-          { type: 'text', text: question },
-          { 
-            type: 'image', 
-            data: imageBuffer.toString('base64'),
-            mimeType: 'image/jpeg'
-          }
-        ]
-      }
-    ]
+          { type: "text", text: question },
+          {
+            type: "image",
+            data: imageBuffer.toString("base64"),
+            mimeType: "image/jpeg",
+          },
+        ],
+      },
+    ],
   });
-  
+
   return result.text;
 }
 ```
@@ -268,30 +277,30 @@ export async function analyzeImage(imageBuffer: Buffer, question: string) {
 
 ```typescript
 // Analyzing PDF documents with Claude
-import { anthropic } from '@ai-sdk/anthropic';
-import { generateText } from 'ai';
-import fs from 'fs';
+import { anthropic } from "@ai-sdk/anthropic";
+import { generateText } from "ai";
+import fs from "fs";
 
 export async function analyzePDF(pdfPath: string, question: string) {
   const pdfBuffer = fs.readFileSync(pdfPath);
-  
+
   const result = await generateText({
-    model: anthropic('claude-3-5-sonnet-20241022'),
+    model: anthropic("claude-3-5-sonnet-20241022"),
     messages: [
       {
-        role: 'user',
+        role: "user",
         content: [
-          { type: 'text', text: question },
-          { 
-            type: 'file', 
+          { type: "text", text: question },
+          {
+            type: "file",
             data: pdfBuffer,
-            mimeType: 'application/pdf'
-          }
-        ]
-      }
-    ]
+            mimeType: "application/pdf",
+          },
+        ],
+      },
+    ],
   });
-  
+
   return result.text;
 }
 ```
@@ -300,37 +309,42 @@ export async function analyzePDF(pdfPath: string, question: string) {
 
 ```typescript
 // Using Claude's computer use capabilities for agentic tasks
-import { anthropic } from '@ai-sdk/anthropic';
-import { generateText } from 'ai';
+import { anthropic } from "@ai-sdk/anthropic";
+import { generateText } from "ai";
 
 export async function executeWithComputerUse(task: string, data: any) {
   const result = await generateText({
-    model: anthropic('claude-3-7-sonnet-20250219'),
+    model: anthropic("claude-3-7-sonnet-20250219"),
     messages: [
       {
-        role: 'user',
+        role: "user",
         content: [
-          { 
-            type: 'text', 
-            text: `${task}\n\nHere's the data to work with: ${JSON.stringify(data)}` 
-          }
-        ]
-      }
+          {
+            type: "text",
+            text: `${task}\n\nHere's the data to work with: ${JSON.stringify(
+              data
+            )}`,
+          },
+        ],
+      },
     ],
     maxTokens: 4000,
     anthropicOptions: {
-      tools: [{
-        name: 'computer',
-        description: 'Use a virtual computer to create visualizations, analyze data, and perform complex tasks',
-      }],
+      tools: [
+        {
+          name: "computer",
+          description:
+            "Use a virtual computer to create visualizations, analyze data, and perform complex tasks",
+        },
+      ],
       // Can be combined with extended thinking for complex tasks
       thinking: {
-        type: 'enabled',
-        budgetTokens: 8000
-      }
-    }
+        type: "enabled",
+        budgetTokens: 8000,
+      },
+    },
   });
-  
+
   return result;
 }
 ```
@@ -339,28 +353,28 @@ export async function executeWithComputerUse(task: string, data: any) {
 
 ```typescript
 // Using Claude's extended output capabilities for long-form content
-import { anthropic } from '@ai-sdk/anthropic';
-import { generateText } from 'ai';
+import { anthropic } from "@ai-sdk/anthropic";
+import { generateText } from "ai";
 
 export async function generateLongFormContent(topic: string) {
   const result = await generateText({
-    model: anthropic('claude-3-7-sonnet-20250219'),
+    model: anthropic("claude-3-7-sonnet-20250219"),
     messages: [
       {
-        role: 'user',
-        content: `Write a comprehensive guide about ${topic}. Include detailed sections, examples, and best practices.`
-      }
+        role: "user",
+        content: `Write a comprehensive guide about ${topic}. Include detailed sections, examples, and best practices.`,
+      },
     ],
     maxTokens: 32000, // Can go up to 128K with beta feature
     anthropicOptions: {
-      betas: ['output-128k-2025-02-19'], // Enable extended output capability
+      betas: ["output-128k-2025-02-19"], // Enable extended output capability
       thinking: {
-        type: 'enabled',
-        budgetTokens: 16000 // Larger thinking budget for complex content
-      }
-    }
+        type: "enabled",
+        budgetTokens: 16000, // Larger thinking budget for complex content
+      },
+    },
   });
-  
+
   return result;
 }
 ```
@@ -379,11 +393,13 @@ graph LR
 ```
 
 1. **Document Creation (Streaming Phase)**
+
    - Content is generated in real-time by the AI
    - `DocumentPreview` component shows streaming updates
    - UI displays "Creating..." when artifact is expanded
 
 2. **Document Completion**
+
    - Status transitions from 'streaming' to 'idle'
    - Document data persists in the application state
    - Full document interface remains visible in message area
@@ -403,21 +419,22 @@ Documents are tightly integrated with the messaging interface:
 
 ### AI Provider Capabilities Matrix
 
-| Capability | OpenAI (GPT-4o) | Claude 3.5 Sonnet | Claude 3.7 Sonnet |
-|------------|----------------|-------------------|-------------------|
-| Text Generation | ✅ | ✅ | ✅ |
-| Vision/Image Analysis | ✅ | ✅ | ✅ |
-| Function Calling | ✅ | ✅ | ✅ |
-| JSON Mode | ✅ | ✅ | ✅ |
-| Extended Thinking | ❌ | ❌ | ✅ |
-| Extended Output (128K) | ❌ | ❌ | ✅ |
-| Computer Use | ❌ | ❌ | ✅ |
-| PDF Analysis | ❌ | ✅ | ✅ |
-| Cache Control | ❌ | ✅ | ✅ |
+| Capability             | OpenAI (GPT-4o) | Claude 3.5 Sonnet | Claude 3.7 Sonnet |
+| ---------------------- | --------------- | ----------------- | ----------------- |
+| Text Generation        | ✅              | ✅                | ✅                |
+| Vision/Image Analysis  | ✅              | ✅                | ✅                |
+| Function Calling       | ✅              | ✅                | ✅                |
+| JSON Mode              | ✅              | ✅                | ✅                |
+| Extended Thinking      | ❌              | ❌                | ✅                |
+| Extended Output (128K) | ❌              | ❌                | ✅                |
+| Computer Use           | ❌              | ❌                | ✅                |
+| PDF Analysis           | ❌              | ✅                | ✅                |
+| Cache Control          | ❌              | ✅                | ✅                |
 
 ### Claude Implementation Best Practices
 
 1. **Model Selection Guidelines**
+
    - Use Claude 3.7 Sonnet for tasks requiring:
      - Complex reasoning with extended thinking
      - Agentic workflows with computer use
@@ -430,6 +447,7 @@ Documents are tightly integrated with the messaging interface:
    - Use Claude 3 Opus for highest quality outputs when speed is less critical
 
 2. **Optimizing Token Usage**
+
    - Implement cache control for repetitive prompts
    - Configure appropriate thinking budgets based on task complexity:
      - 4K-8K tokens for moderate complexity
@@ -438,6 +456,7 @@ Documents are tightly integrated with the messaging interface:
    - Be aware of context window calculations with extended thinking
 
 3. **Multi-modal Implementation**
+
    - Convert images to base64 for vision capabilities
    - Ensure proper MIME type specification
    - Consider image resolution and size limitations
@@ -455,81 +474,94 @@ Baseplate supports multiple AI providers through a unified configuration system:
 
 ```typescript
 // lib/models.ts
-import { Anthropic } from '@ai-sdk/anthropic';
-import { OpenAI } from '@ai-sdk/openai';
+import { Anthropic } from "@ai-sdk/anthropic";
+import { OpenAI } from "@ai-sdk/openai";
 
 export const models = {
   // OpenAI models
-  'gpt-4o': {
-    provider: 'openai',
-    model: 'gpt-4o',
+  "gpt-4o": {
+    provider: "openai",
+    model: "gpt-4o",
     temperature: 0.7,
   },
-  
+
   // Claude models
-  'claude-3-5-sonnet': {
-    provider: 'anthropic',
-    model: 'claude-3-5-sonnet-20240620',
+  "claude-3-5-sonnet": {
+    provider: "anthropic",
+    model: "claude-3-5-sonnet-20240620",
     temperature: 0.7,
   },
-  'claude-3-7-sonnet': {
-    provider: 'anthropic',
-    model: 'claude-3-7-sonnet-20250219',
+  "claude-3-7-sonnet": {
+    provider: "anthropic",
+    model: "claude-3-7-sonnet-20250219",
     temperature: 0.7,
-  }
-}
+  },
+};
 
 // Direct SDK integration example
 export const openaiConfig = {
-  standard: new OpenAI({ apiKey: process.env.OPENAI_API_KEY }).chat('gpt-4o'),
-  vision: new OpenAI({ apiKey: process.env.OPENAI_API_KEY }).chat('gpt-4o-vision'),
-}
+  standard: new OpenAI({ apiKey: process.env.OPENAI_API_KEY }).chat("gpt-4o"),
+  vision: new OpenAI({ apiKey: process.env.OPENAI_API_KEY }).chat(
+    "gpt-4o-vision"
+  ),
+};
 
 export const claudeConfig = {
   // Claude 3.7 Sonnet - Latest model with extended thinking and computer use
-  sonnet37: new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-    .chat('claude-3-7-sonnet-20250219', {
+  sonnet37: new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }).chat(
+    "claude-3-7-sonnet-20250219",
+    {
       // Enable extended thinking for complex reasoning
       thinking: {
-        type: 'enabled',
-        budgetTokens: 8000 // Allocate tokens for thinking process
+        type: "enabled",
+        budgetTokens: 8000, // Allocate tokens for thinking process
       },
       // Optional: Enable extended output (beta) for long-form content
       // betas: ['output-128k-2025-02-19'],
       // maxTokens: 32000, // Can go up to 128K tokens with beta feature
-      
+
       // Optional: Enable computer use for agentic workflows
-      tools: [{
-        name: 'computer',
-        description: 'Use a virtual computer to create visualizations, analyze data, and perform complex tasks',
-      }]
-    }),
-  
+      tools: [
+        {
+          name: "computer",
+          description:
+            "Use a virtual computer to create visualizations, analyze data, and perform complex tasks",
+        },
+      ],
+    }
+  ),
+
   // Claude 3.5 Sonnet - Balanced performance with vision and PDF capabilities
-  sonnet35: new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-    .chat('claude-3-5-sonnet-20240620', {
+  sonnet35: new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }).chat(
+    "claude-3-5-sonnet-20240620",
+    {
       // Configure for PDF analysis
-      fileFormats: ['pdf']
-    }),
-  
+      fileFormats: ["pdf"],
+    }
+  ),
+
   // Claude 3 Opus - Best for complex reasoning tasks
-  opus: new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }).chat('claude-3-opus-20240229'),
-}
+  opus: new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }).chat(
+    "claude-3-opus-20240229"
+  ),
+};
 ```
+
 // lib/models.ts example
 export const models = {
-  'gpt-4o': {
-    provider: 'openai',
-    model: 'gpt-4o',
-    temperature: 0.7,
-  },
-  'claude-3-opus': {
-    provider: 'anthropic',
-    model: 'claude-3-opus-20240229',
-    temperature: 0.5,
-  }
+'gpt-4o': {
+provider: 'openai',
+model: 'gpt-4o',
+temperature: 0.7,
+},
+'claude-3-opus': {
+provider: 'anthropic',
+model: 'claude-3-opus-20240229',
+temperature: 0.5,
 }
-```
+}
+
+````
 
 ## Use Cases
 
@@ -551,7 +583,7 @@ export type SpreadsheetDocument = {
 // 2. Add a renderer in artifacts/document-content.tsx
 case 'spreadsheet':
   return <SpreadsheetEditor data={document.data} headers={document.headers} />;
-```
+````
 
 ### 2. Multi-Model Assistant
 
@@ -561,10 +593,16 @@ Implement an assistant that uses different models for different tasks:
 // Example: Adding model selection to chat interface
 // lib/models.ts - Add model definitions
 export const models = {
-  'gpt-4o': { /* config */ },
-  'claude-3-opus': { /* config */ },
-  'claude-3-sonnet': { /* config */ },
-}
+  "gpt-4o": {
+    /* config */
+  },
+  "claude-3-opus": {
+    /* config */
+  },
+  "claude-3-sonnet": {
+    /* config */
+  },
+};
 
 // components/model-selector.tsx - Create a model selector component
 export function ModelSelector({ onSelect }) {
@@ -574,7 +612,7 @@ export function ModelSelector({ onSelect }) {
       <SelectItem value="claude-3-opus">Claude 3 Opus (Detailed)</SelectItem>
       <SelectItem value="claude-3-sonnet">Claude 3 Sonnet (Fast)</SelectItem>
     </Select>
-  )
+  );
 }
 ```
 
@@ -585,30 +623,33 @@ Build a knowledge management system with AI-generated content:
 ```typescript
 // Example: Creating a knowledge base article endpoint
 // app/api/kb/create/route.ts
-import { OpenAI } from '@ai-sdk/openai'
-import { streamText } from 'ai'
-import { db } from '@/lib/db'
+import { OpenAI } from "@ai-sdk/openai";
+import { streamText } from "ai";
+import { db } from "@/lib/db";
 
 export async function POST(req: Request) {
-  const { topic, context } = await req.json()
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
-  
+  const { topic, context } = await req.json();
+  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
   const result = await streamText({
-    model: openai.chat('gpt-4o'),
+    model: openai.chat("gpt-4o"),
     messages: [
-      { role: 'system', content: 'Create a knowledge base article on the given topic.' },
-      { role: 'user', content: `Topic: ${topic}\nContext: ${context}` }
-    ]
-  })
-  
+      {
+        role: "system",
+        content: "Create a knowledge base article on the given topic.",
+      },
+      { role: "user", content: `Topic: ${topic}\nContext: ${context}` },
+    ],
+  });
+
   // Store in database
   await db.insert(kbArticles).values({
     topic,
     content: result.text,
-    createdAt: new Date()
-  })
-  
-  return Response.json({ success: true, articleId: result.id })
+    createdAt: new Date(),
+  });
+
+  return Response.json({ success: true, articleId: result.id });
 }
 ```
 
@@ -619,89 +660,106 @@ Optimize Baseplate specifically for Claude models:
 ```typescript
 // Example: Configuring for Claude 3.7 Sonnet with extended capabilities
 // lib/claude-advanced.ts
-import { Anthropic } from '@anthropic-ai/sdk';
+import { Anthropic } from "@anthropic-ai/sdk";
 
 export const claudeAdvanced = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
-export async function generateWithExtendedCapabilities(prompt: string, options: {
-  extendedThinking?: boolean,
-  extendedOutput?: boolean,
-  computerUse?: boolean,
-}) {
+export async function generateWithExtendedCapabilities(
+  prompt: string,
+  options: {
+    extendedThinking?: boolean;
+    extendedOutput?: boolean;
+    computerUse?: boolean;
+  }
+) {
   const response = await claudeAdvanced.messages.create({
-    model: 'claude-3-7-sonnet-20250219',
+    model: "claude-3-7-sonnet-20250219",
     max_tokens: options.extendedOutput ? 32000 : 4000,
-    messages: [{
-      role: 'user',
-      content: prompt
-    }],
+    messages: [
+      {
+        role: "user",
+        content: prompt,
+      },
+    ],
     // Configure extended thinking if enabled
-    thinking: options.extendedThinking ? {
-      type: 'enabled',
-      budget_tokens: 16000
-    } : undefined,
+    thinking: options.extendedThinking
+      ? {
+          type: "enabled",
+          budget_tokens: 16000,
+        }
+      : undefined,
     // Configure computer use if enabled
-    tools: options.computerUse ? [{
-      name: 'computer',
-      description: 'Use a virtual computer to perform tasks'
-    }] : undefined,
+    tools: options.computerUse
+      ? [
+          {
+            name: "computer",
+            description: "Use a virtual computer to perform tasks",
+          },
+        ]
+      : undefined,
     // Enable extended output beta if requested
-    betas: options.extendedOutput ? ['output-128k-2025-02-19'] : undefined,
+    betas: options.extendedOutput ? ["output-128k-2025-02-19"] : undefined,
   });
 
   return {
     content: response.content,
     thinking: response.thinking,
-    usage: response.usage
+    usage: response.usage,
   };
 }
 ```
 
 ```typescript
 // lib/claude-config.ts
-import { Anthropic } from '@ai-sdk/anthropic'
+import { Anthropic } from "@ai-sdk/anthropic";
 
 export const claudeConfig = {
   // Claude 3.7 Sonnet - Latest model with extended thinking and computer use
-  'claude-3-7-sonnet': {
-    provider: 'anthropic',
-    model: 'claude-3-7-sonnet-20250219',
+  "claude-3-7-sonnet": {
+    provider: "anthropic",
+    model: "claude-3-7-sonnet-20250219",
     temperature: 0.7,
     // Extended thinking configuration
     thinking: {
-      type: 'enabled',
-      budgetTokens: 8000
+      type: "enabled",
+      budgetTokens: 8000,
     },
     // For extended output (beta)
     // betas: ['output-128k-2025-02-19'],
     // maxTokens: 32000,
   },
-  
+
   // Claude 3.5 Sonnet - Balanced performance and capabilities
-  'claude-3-5-sonnet': {
-    provider: 'anthropic',
-    model: 'claude-3-5-sonnet-20240620',
+  "claude-3-5-sonnet": {
+    provider: "anthropic",
+    model: "claude-3-5-sonnet-20240620",
     temperature: 0.7,
   },
-  
+
   // Claude 3 Opus - Best for complex reasoning and detailed outputs
-  opus: new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }).chat('claude-3-opus-20240229'),
-  
+  opus: new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }).chat(
+    "claude-3-opus-20240229"
+  ),
+
   // Claude 3 Sonnet - Balanced performance and speed
-  sonnet: new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }).chat('claude-3-sonnet-20240229'),
-  
+  sonnet: new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }).chat(
+    "claude-3-sonnet-20240229"
+  ),
+
   // Claude 3 Haiku - Fastest response times
-  haiku: new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }).chat('claude-3-haiku-20240307')
-}
+  haiku: new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }).chat(
+    "claude-3-haiku-20240307"
+  ),
+};
 
 // Claude-optimized system prompts
 export const claudePrompts = {
   chatbot: `You are Claude, an AI assistant by Anthropic. You are helpful, harmless, and honest.`,
   documentGenerator: `You are a document creation assistant. Create well-structured, comprehensive documents based on user requests.`,
-  codeAssistant: `You are a coding assistant. Provide clear, efficient, and well-documented code solutions.`
-}
+  codeAssistant: `You are a coding assistant. Provide clear, efficient, and well-documented code solutions.`,
+};
 ```
 
 ## Deployment & Operations
@@ -733,12 +791,12 @@ pnpm lint
 
 ### Common Issues & Solutions
 
-| Issue | Solution |
-|-------|----------|
-| **Claude API errors** | Verify ANTHROPIC_API_KEY is correct and has sufficient quota |
-| **Document streaming issues** | Check network connection and ensure proper stream handling |
-| **Database connection failures** | Verify POSTGRES_URL format and database accessibility |
-| **UI rendering problems** | Clear browser cache or rebuild with `rm -rf .next && pnpm build` |
+| Issue                            | Solution                                                         |
+| -------------------------------- | ---------------------------------------------------------------- |
+| **Claude API errors**            | Verify ANTHROPIC_API_KEY is correct and has sufficient quota     |
+| **Document streaming issues**    | Check network connection and ensure proper stream handling       |
+| **Database connection failures** | Verify POSTGRES_URL format and database accessibility            |
+| **UI rendering problems**        | Clear browser cache or rebuild with `rm -rf .next && pnpm build` |
 
 ### Performance Optimization
 
