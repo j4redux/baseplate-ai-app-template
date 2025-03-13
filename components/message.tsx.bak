@@ -191,57 +191,56 @@ const PurePreviewMessage = ({
               </div>
             )}
 
-            {message.toolInvocations && message.toolInvocations.length > 0 && (
-              <div className="flex flex-col gap-4">
-                {(() => {
-                  // First identify all document-related operations in this message
-                  const documentOperations = message.toolInvocations
-                    .filter(invocation => [
-                      'createDocument', 
-                      'updateDocument'
-                    ].includes(invocation.toolName))
-                    .map(invocation => invocation.toolCallId);
-                  
-                  // Then render each tool invocation with document operation context
-                  return message.toolInvocations.map((toolInvocation) => {
+            {message.toolInvocations && message.toolInvocations.length > 0 ? (function() {
+              // Find the latest document operation (create or update) in this message
+              const toolInvocations = message.toolInvocations || [];
+              const documentOperations = toolInvocations
+                .filter(invocation => 
+                  invocation.state === 'result' && 
+                  (invocation.toolName === 'createDocument' || invocation.toolName === 'updateDocument')
+                );
+              
+              const latestDocumentOperation = documentOperations.length > 0 ? 
+                documentOperations[documentOperations.length - 1] : null;
+              
+              return (
+                <div className="flex flex-col gap-4">
+                  {(message.toolInvocations || []).map((toolInvocation) => {
                     const { toolName, toolCallId, state, args } = toolInvocation;
-                    const isDocumentOperation = documentOperations.includes(toolCallId);
-                    const isLatestDocOperation = isDocumentOperation && 
-                      documentOperations.indexOf(toolCallId) === documentOperations.length - 1;
 
                     if (state === 'result') {
                       const { result } = toolInvocation;
-
+                      
+                      // For document operations, check if this is the latest one
+                      const isLatestDocumentOperation = 
+                        (toolName === 'createDocument' || toolName === 'updateDocument') && 
+                        latestDocumentOperation && 
+                        toolCallId === latestDocumentOperation.toolCallId;
+                      
+                      // For document operations that aren't the latest, show a simple button
+                      const isNonLatestDocumentOperation = 
+                        (toolName === 'createDocument' || toolName === 'updateDocument') && 
+                        !isLatestDocumentOperation;
+                        
                       return (
                         <div key={toolCallId}>
                           {toolName === 'getWeather' ? (
                             <Weather weatherAtLocation={result} />
-                          ) : toolName === 'createDocument' ? (
+                          ) : isLatestDocumentOperation ? (
+                            // Show full preview for latest document operation
                             <DocumentPreview
                               isReadonly={isReadonly}
                               result={result}
-                              args={args}
-                              toolCallId={toolCallId}
-                              isLatestOperation={isLatestDocOperation}
-                              documentOperations={documentOperations}
+                              args={toolName === 'createDocument' ? args : undefined}
+                              forceStreaming={toolName === 'updateDocument'}
                             />
-                          ) : toolName === 'updateDocument' ? (
-                            isLatestDocOperation ? (
-                              <DocumentPreview
-                                isReadonly={isReadonly}
-                                result={result}
-                                args={args}
-                                toolCallId={toolCallId}
-                                isLatestOperation={isLatestDocOperation}
-                                documentOperations={documentOperations}
-                              />
-                            ) : (
-                              <DocumentToolResult
-                                type="update"
-                                result={result}
-                                isReadonly={isReadonly}
-                              />
-                            )
+                          ) : isNonLatestDocumentOperation ? (
+                            // Show simple button for non-latest document operations
+                            <DocumentToolResult
+                              type={toolName === 'createDocument' ? 'create' : 'update'}
+                              result={result}
+                              isReadonly={isReadonly}
+                            />
                           ) : toolName === 'requestSuggestions' ? (
                             <DocumentToolResult
                               type="request-suggestions"
@@ -257,37 +256,32 @@ const PurePreviewMessage = ({
                     return (
                       <div
                         key={toolCallId}
-                        className={cx({
-                          skeleton: ['getWeather'].includes(toolName),
-                        })}
-                      >
-                        {toolName === 'getWeather' ? (
-                          <Weather />
-                        ) : toolName === 'createDocument' ? (
-                          <DocumentPreview
-                            isReadonly={isReadonly}
-                            args={args}
-                            toolCallId={toolCallId}
-                            isLatestOperation={isLatestDocOperation}
-                            documentOperations={documentOperations}
-                          />
-                        ) : toolName === 'updateDocument' ? (
-                          <DocumentToolCall
-                            type="update"
-                            args={args}
-                            isReadonly={isReadonly}
-                          />
-                        ) : toolName === 'requestSuggestions' ? (
-                          <DocumentToolCall
-                            type="request-suggestions"
-                            args={args}
-                            isReadonly={isReadonly}
-                          />
-                        ) : null}
-                      </div>
-                    );
-                  });
-                })()} 
+                      className={cx({
+                        skeleton: ['getWeather'].includes(toolName),
+                      })}
+                    >
+                      {toolName === 'getWeather' ? (
+                        <Weather />
+                      ) : toolName === 'createDocument' ? (
+                        <DocumentPreview
+                          isReadonly={isReadonly}
+                          args={args} />
+                      ) : toolName === 'updateDocument' ? (
+                        <DocumentToolCall
+                          type="update"
+                          args={args}
+                          isReadonly={isReadonly}
+                        />
+                      ) : toolName === 'requestSuggestions' ? (
+                        <DocumentToolCall
+                          type="request-suggestions"
+                          args={args}
+                          isReadonly={isReadonly}
+                        />
+                      ) : null}
+                    </div>
+                  );
+                })}
               </div>
             )}
 

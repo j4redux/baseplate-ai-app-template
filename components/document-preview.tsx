@@ -35,12 +35,18 @@ interface DocumentPreviewProps {
   isReadonly: boolean;
   result?: any;
   args?: any;
+  toolCallId?: string;
+  isLatestOperation?: boolean;
+  documentOperations?: string[];
 }
 
 export function DocumentPreview({
   isReadonly,
   result,
   args,
+  toolCallId,
+  isLatestOperation = true,
+  documentOperations = [],
 }: DocumentPreviewProps) {
   const { artifact, setArtifact } = useArtifact();
   const hitboxRef = useRef<HTMLDivElement>(null);
@@ -94,6 +100,13 @@ export function DocumentPreview({
     return null;
   }, [previewDocument, artifact, result, args]);
 
+  // Check if this preview should be collapsed due to newer operations
+  const hasNewerOperations = useMemo(() => {
+    if (!toolCallId || documentOperations.length <= 1) return false;
+    const currentIndex = documentOperations.indexOf(toolCallId);
+    return currentIndex >= 0 && currentIndex < documentOperations.length - 1;
+  }, [toolCallId, documentOperations]);
+
   // Update bounding box when document ID changes
   useEffect(() => {
     const boundingBox = hitboxRef.current?.getBoundingClientRect();
@@ -110,6 +123,41 @@ export function DocumentPreview({
       }));
     }
   }, [artifact.documentId, setArtifact]);
+  
+  // Handle document visibility based on subsequent updates
+  useEffect(() => {
+    // Only apply to the currently active document
+    if (artifact.documentId !== document?.id) return;
+    
+    // If this is not the latest operation, ensure it's collapsed
+    if (hasNewerOperations && artifact.isVisible) {
+      debugLog('Collapsing document preview due to newer operations', { toolCallId, documentOperations });
+      setArtifact((prevArtifact) => ({
+        ...prevArtifact,
+        isVisible: false
+      }));
+    }
+  }, [hasNewerOperations, artifact.documentId, artifact.isVisible, document?.id, setArtifact, toolCallId, documentOperations]);
+
+  // Reference to the document content container for auto-scrolling
+  const contentContainerRef = useRef<HTMLDivElement | null>(null);
+  
+  // Effect to handle auto-scrolling during streaming
+  useEffect(() => {
+    // Only auto-scroll during streaming
+    if (artifact.status === 'streaming' && contentContainerRef.current) {
+      // Use double requestAnimationFrame to ensure smooth scrolling to new content
+      // This technique ensures the DOM has time to update before we attempt to scroll
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (contentContainerRef.current) {
+            // Scroll to the bottom of the content container
+            contentContainerRef.current.scrollTop = contentContainerRef.current.scrollHeight;
+          }
+        });
+      });
+    }
+  }, [artifact.status, artifact.content]); // Re-run when content changes or status changes
 
   // Render full document preview interface
   const renderFullDocumentPreview = (title: string, content: string) => {
@@ -182,7 +230,10 @@ export function DocumentPreview({
               <FullscreenIcon />
             </div>
           </div>
-          <div className="overflow-y-scroll border rounded-b-2xl px-8 py-4 bg-background border-t-0 dark:border-zinc-700 h-[257px]">
+          <div 
+            ref={contentContainerRef}
+            className="overflow-y-scroll border rounded-b-2xl px-8 py-4 bg-background border-t-0 dark:border-zinc-700 h-[257px]"
+          >
             <div className="prose prose-sm dark:prose-invert max-w-none overflow-hidden">
               <Markdown isDocument={true}>{content || ''}</Markdown>
             </div>
@@ -216,6 +267,12 @@ export function DocumentPreview({
 
   // CASE 1: Document is complete (result exists)
   if (result) {
+    // If this document has newer operations, always show the static variant
+    if (hasNewerOperations) {
+      debugLog('Using static variant due to newer operations', { toolCallId, documentOperations });
+      return renderSimpleDocumentResult(result.id, result.title, result.kind);
+    }
+    
     // If expanded, show simple result to avoid duplication with editor
     if (artifact.isVisible) {
       return renderSimpleDocumentResult(result.id, result.title, result.kind);
@@ -230,6 +287,18 @@ export function DocumentPreview({
   
   // CASE 2: Document is being created (args exist)
   if (args) {
+    // If this document has newer operations, always show the static variant
+    if (hasNewerOperations) {
+      debugLog('Using static variant during creation due to newer operations', { toolCallId });
+      return (
+        <DocumentToolCall
+          type="create"
+          args={{ title: args.title }}
+          isReadonly={isReadonly}
+        />
+      );
+    }
+    
     // If expanded, show simple creating message
     if (artifact.isVisible) {
       return (
@@ -271,6 +340,12 @@ export function DocumentPreview({
 
   // CASE 3: Default case - normal document viewing
   if (document) {
+    // If this document has newer operations, always show a static variant
+    if (hasNewerOperations) {
+      debugLog('Using static variant for document view due to newer operations', { toolCallId });
+      return renderSimpleDocumentResult(document.id, document.title, document.kind);
+    }
+    
     // When artifact is not expanded, always show the full document preview interface
     // This ensures consistent behavior before/after refresh
     if (!artifact.isVisible) {
