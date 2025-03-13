@@ -1,6 +1,7 @@
 import { Artifact } from '@/components/create-artifact';
 import { DiffView } from '@/components/diffview';
 import { DocumentSkeleton } from '@/components/document-skeleton';
+import { EditorContainer } from '@/components/editor-container';
 import { Editor } from '@/components/text-editor';
 import { UIArtifact, ArtifactKind } from '@/components/artifact';
 import {
@@ -316,53 +317,99 @@ export const textArtifact = new Artifact<'text', TextArtifactMetadata>({
     
     // Handle streaming finish event
     if (streamPart.type === 'finish') {
-      console.log('Streaming finished, finalizing document');
+      console.log('[TextArtifact] Streaming finished, finalizing document');
       
       // Mark streaming as complete while preserving message consistency
       setMetadata(prevMetadata => {
+        // Ensure we have a valid metadata object
         if (!prevMetadata) {
+          const newMessageId = generateUUID();
+          console.log('[TextArtifact] Creating new metadata structure with message ID:', newMessageId);
           return {
             suggestions: [],
             messages: [{
-              id: generateUUID(),
+              id: newMessageId,
               content: '',
               timestamp: Date.now()
             }],
-            documentContent: ''
+            documentContent: '',
+            // Add explicit message structure preservation flags
+            messageStructurePreserved: true,
+            messageStructureVersion: 1
           };
         }
         
+        // If no messages exist, create a properly structured one
         if (!prevMetadata.messages?.length) {
-          // If no messages exist, create an empty one
+          const newMessageId = generateUUID();
+          console.log('[TextArtifact] Creating new message structure with ID:', newMessageId);
+          
+          // Use document content as the message content
+          const documentContent = prevMetadata.documentContent || '';
+          
           return {
             ...prevMetadata,
             messages: [{
-              id: generateUUID(),
-              content: prevMetadata.documentContent || '',
+              id: newMessageId,
+              content: documentContent,
               timestamp: Date.now()
             }],
-            documentContent: prevMetadata.documentContent || ''
+            documentContent: documentContent,
+            // Add explicit message structure preservation flags
+            messageStructurePreserved: true,
+            messageStructureVersion: 1
           };
         }
         
-        // Ensure document content is synchronized with message content
-        const finalContent = prevMetadata.messages[0]?.content || prevMetadata.documentContent || '';
-        console.log('Final document content length:', finalContent.length);
+        // Get the primary message and ensure it has the complete content
+        const primaryMessage = prevMetadata.messages[0];
         
+        // Determine the final content - prioritize message content over document content
+        // This ensures the message structure is preserved correctly
+        const messageContent = primaryMessage?.content || '';
+        const documentContent = prevMetadata.documentContent || '';
+        
+        // Use the longer content to ensure we don't lose any data
+        const finalContent = messageContent.length >= documentContent.length ? 
+          messageContent : documentContent;
+        
+        console.log('[TextArtifact] Finalizing document content:', {
+          messageId: primaryMessage?.id,
+          contentLength: finalContent.length,
+          messageContentLength: messageContent.length,
+          documentContentLength: documentContent.length
+        });
+        
+        // Create an updated message with the final content
+        const updatedMessage = {
+          ...primaryMessage,
+          content: finalContent,
+          // Keep the original timestamp to maintain message consistency
+          timestamp: primaryMessage.timestamp
+        };
+        
+        // Return updated metadata with preserved message structure
         return {
           ...prevMetadata,
-          documentContent: finalContent
+          documentContent: finalContent,
+          messages: [updatedMessage, ...(prevMetadata.messages.slice(1) || [])],
+          // Add explicit message structure preservation flags
+          messageStructurePreserved: true,
+          messageStructureVersion: 1
         };
       });
       
       // Update artifact state to reflect completion
       // Preserve the current visibility state - don't force it to be visible
-      setArtifact(current => ({
-        ...current,
-        status: 'idle',
-        // Don't change visibility state - maintain user control
-        isVisible: current.isVisible
-      }));
+      setArtifact(current => {
+        console.log('[TextArtifact] Setting artifact status to idle');
+        return {
+          ...current,
+          status: 'idle',
+          // Don't change visibility state - maintain user control
+          isVisible: current.isVisible
+        };
+      });
     }
   },
   content: ({
@@ -458,22 +505,21 @@ export const textArtifact = new Artifact<'text', TextArtifactMetadata>({
       return <DocumentSkeleton artifactKind="text" />;
     }
     
-    // When streaming, we always render the editor immediately
-    // This ensures we have a container ready to receive streaming content
-    if (status === 'streaming') {
-      console.log('[TextArtifactClient] Streaming mode active, rendering editor directly', {
-        contentLength: content?.length || 0,
-        timestamp: new Date().toISOString()
-      });
-      
-      // Force a high priority render to ensure streaming content is displayed immediately
-      // This uses React's scheduler to prioritize this update
-      useLayoutEffect(() => {
+    // Always execute hooks in the same order per React's rules
+    // Using a consistent hook execution pattern regardless of status
+    useLayoutEffect(() => {
+      // Only run the effect logic when streaming
+      if (status === 'streaming') {
+        console.log('[TextArtifactClient] Streaming mode active, rendering editor directly', {
+          contentLength: content?.length || 0,
+          timestamp: new Date().toISOString()
+        });
+        
         // This effect will run after every render during streaming
         // to ensure the DOM is updated with the latest content
         console.log('[TextArtifactClient] Layout effect triggered during streaming');
-      }, [content, status]);
-    }
+      }
+    }, [content, status]);
 
     // Handle diff view mode
     if (mode === 'diff' && currentVersionIndex > 0) {
@@ -504,7 +550,7 @@ export const textArtifact = new Artifact<'text', TextArtifactMetadata>({
     });
     
     return (
-      <div className="w-full h-full overflow-auto p-8">
+      <EditorContainer>
         {/* Apply consistent styling to the editor */}
         <Editor
           content={documentContent}
@@ -515,7 +561,7 @@ export const textArtifact = new Artifact<'text', TextArtifactMetadata>({
           onSaveContent={onSaveContent}
           isDocument={true}
         />
-      </div>
+      </EditorContainer>
     );
   },
   actions: [

@@ -263,6 +263,9 @@ function PureArtifact({
         artifactDefinition.initialize({
           documentId: artifact.documentId,
           setMetadata,
+          setArtifact: function (value: SetStateAction<UIArtifact>): void {
+            throw new Error('Function not implemented.');
+          }
         });
       }
     }
@@ -445,8 +448,14 @@ function PureArtifact({
                         },
                       )}`}
                     </div>
+                  ) : isDocumentsFetching ? (
+                    <div className="text-sm text-muted-foreground">
+                      Loading document info...
+                    </div>
                   ) : (
-                    <div className="w-32 h-3 mt-2 bg-muted-foreground/20 rounded-md animate-pulse" />
+                    <div className="text-sm text-muted-foreground">
+                      {artifact.status === 'streaming' ? 'Creating document...' : `Updated ${formatDistance(new Date(), new Date(), { addSuffix: true })}`}
+                    </div>
                   )}
                 </div>
               </div>
