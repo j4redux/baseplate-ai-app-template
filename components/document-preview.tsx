@@ -12,6 +12,7 @@ import {
 } from 'react';
 import { ArtifactKind, UIArtifact } from './artifact';
 import { FileIcon, FullscreenIcon, ImageIcon, LoaderIcon } from './icons';
+import { Markdown } from './markdown';
 import { cn, fetcher } from '@/lib/utils';
 import { Document } from '@/lib/db/schema';
 import { InlineDocumentSkeleton } from './document-skeleton';
@@ -170,7 +171,7 @@ export function DocumentPreview({
             });
           }}
         >
-          <div className="p-4 border rounded-t-2xl flex flex-row gap-2 items-center justify-between dark:bg-muted h-[57px] dark:border-zinc-700 border-b-0">
+          <div className="p-4 border rounded-t-2xl flex flex-row gap-2 items-center justify-between bg-zinc-100 dark:bg-muted h-[57px] dark:border-zinc-700 border-b-0">
             <div className="flex flex-row items-center gap-3">
               <div className="text-muted-foreground">
                 <FileIcon />
@@ -181,9 +182,9 @@ export function DocumentPreview({
               <FullscreenIcon />
             </div>
           </div>
-          <div className="overflow-y-scroll border rounded-b-2xl p-4 bg-background border-t-0 dark:border-zinc-700 h-[257px]">
-            <div className="whitespace-pre-wrap overflow-hidden font-mono text-sm">
-              {content || ''}
+          <div className="overflow-y-scroll border rounded-b-2xl px-8 py-4 bg-background border-t-0 dark:border-zinc-700 h-[257px]">
+            <div className="prose prose-sm dark:prose-invert max-w-none overflow-hidden">
+              <Markdown isDocument={true}>{content || ''}</Markdown>
             </div>
           </div>
         </div>
