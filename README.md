@@ -104,8 +104,8 @@ Baseplate provides a flexible foundation for building various AI-powered applica
 
 ```bash
 # Clone repository
-git clone https://github.com/j4redux/baseplate-next.git
-cd your-new-project
+git clone https://github.com/j4redux/baseplate-next.git project-name
+cd project-name
 
 # Install dependencies
 pnpm install
