@@ -547,22 +547,6 @@ export const claudeConfig = {
 };
 ```
 
-// lib/models.ts example
-export const models = {
-'gpt-4o': {
-provider: 'openai',
-model: 'gpt-4o',
-temperature: 0.7,
-},
-'claude-3-opus': {
-provider: 'anthropic',
-model: 'claude-3-opus-20240229',
-temperature: 0.5,
-}
-}
-
-````
-
 ## Use Cases
 
 Baseplate can be adapted for various AI application scenarios:
