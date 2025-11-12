@@ -1,4 +1,4 @@
-# Baseplate: AI Application Framework
+# Baseplate: AI App Template
 
 <p align="center">
   A flexible, production-ready AI application template built with Next.js and the AI SDK.
