@@ -13,9 +13,9 @@ const lexend = Lexend({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://chat.j4redux.com'),
-  title: 'J4Redux Chatbot',
-  description: 'Next.js chatbot template using the AI SDK.',
+  metadataBase: new URL('https://baseplate.example.com'),
+  title: 'Baseplate AI',
+  description: 'A flexible, production-ready AI application framework built with Next.js and the AI SDK.',
 };
 
 export const viewport = {

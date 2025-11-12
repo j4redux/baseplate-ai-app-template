@@ -1,7 +1,7 @@
 # Baseplate: AI Application Framework
 
 <p align="center">
-  A flexible, production-ready AI application framework built with Next.js and the AI SDK by j4redux.
+  A flexible, production-ready AI application template built with Next.js and the AI SDK.
 </p>
 
 <p align="center">
@@ -421,15 +421,15 @@ Documents are tightly integrated with the messaging interface:
 
 | Capability             | OpenAI (GPT-4o) | Claude 3.5 Sonnet | Claude 3.7 Sonnet |
 | ---------------------- | --------------- | ----------------- | ----------------- |
-| Text Generation        | ✅              | ✅                | ✅                |
-| Vision/Image Analysis  | ✅              | ✅                | ✅                |
-| Function Calling       | ✅              | ✅                | ✅                |
-| JSON Mode              | ✅              | ✅                | ✅                |
-| Extended Thinking      | ❌              | ❌                | ✅                |
-| Extended Output (128K) | ❌              | ❌                | ✅                |
-| Computer Use           | ❌              | ❌                | ✅                |
-| PDF Analysis           | ❌              | ✅                | ✅                |
-| Cache Control          | ❌              | ✅                | ✅                |
+| Text Generation        | Yes             | Yes               | Yes               |
+| Vision/Image Analysis  | Yes             | Yes               | Yes               |
+| Function Calling       | Yes             | Yes               | Yes               |
+| JSON Mode              | Yes             | Yes               | Yes               |
+| Extended Thinking      | No              | No                | Yes               |
+| Extended Output (128K) | No              | No                | Yes               |
+| Computer Use           | No              | No                | Yes               |
+| PDF Analysis           | No              | Yes               | Yes               |
+| Cache Control          | No              | Yes               | Yes               |
 
 ### Claude Implementation Best Practices
 
@@ -809,4 +809,3 @@ pnpm lint
 - [AI SDK Documentation](https://sdk.vercel.ai/docs)
 - [Claude API Documentation](https://docs.anthropic.com/claude/reference/getting-started-with-the-api)
 - [Next.js Documentation](https://nextjs.org/docs)
-- [Community Discord](https://discord.gg/example)

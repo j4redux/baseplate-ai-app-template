@@ -2,6 +2,23 @@
   "name": "baseplate",
   "version": "0.1.0",
   "private": true,
+  "description": "A flexible, production-ready AI application framework built with Next.js and the AI SDK",
+  "author": "Johnny Heo",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/j4redux/baseplate-next.git"
+  },
+  "homepage": "https://github.com/j4redux/baseplate-next",
+  "keywords": [
+    "ai",
+    "chatbot",
+    "nextjs",
+    "anthropic",
+    "claude",
+    "openai",
+    "vercel-ai-sdk"
+  ],
+  "license": "MIT",
   "scripts": {
     "dev": "NEXT_DISABLE_FILESYSTEM_API=1 next dev --turbo",
     "build": "tsx lib/db/migrate && next build",
