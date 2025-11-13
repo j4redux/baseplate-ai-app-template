@@ -14,6 +14,11 @@
 </p>
 <br/>
 
+<p align="center">
+  <img src="demo1.gif" alt="Baseplate Demo" width="800">
+</p>
+<br/>
+
 ## Features
 
 - **Modern Web Framework**
