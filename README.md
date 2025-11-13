@@ -15,7 +15,7 @@
 <br/>
 
 <p align="center">
-  <img src="demo1.gif" alt="Baseplate Demo" width="800">
+  <img src="demo.gif" alt="Baseplate Demo" width="800">
 </p>
 <br/>
 
