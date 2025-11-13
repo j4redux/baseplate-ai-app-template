@@ -1,7 +1,7 @@
 # Baseplate: AI App Template
 
 <p align="center">
-  A flexible, production-ready AI application template built with Next.js and the AI SDK.
+  A flexible, production-ready AI application template with Artifacts support, built with Next.js and the AI SDK.
 </p>
 
 <p align="center">
